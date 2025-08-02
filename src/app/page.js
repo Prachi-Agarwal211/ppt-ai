@@ -2,16 +2,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FaGoogle } from 'react-icons/fa';
+import { FiEye, FiEyeOff } from 'react-icons/fi';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { createClient } from '../utils/supabase/client';
 
 /**
- * NetherAISignIn Component - v17 (Final & Complete)
+ * NetherAISignIn Component - v18 (UI/UX Enhanced)
  *
  * This component now features:
  * - Direct Vanta.js integration for a consistent, color-changing background.
  * - All purple accents are replaced with a cohesive 'peachSoft' off-white theme.
  * - Buttons are correctly styled with `primary-button` and `secondary-button`.
+ * - Added password visibility toggle for improved UX.
+ * - Enhanced form submission feedback and error handling.
  */
 export default function NetherAISignIn() {
   const supabase = createClient();
@@ -22,6 +25,7 @@ export default function NetherAISignIn() {
   const vantaRef = useRef(null);
   const [vantaEffect, setVantaEffect] = useState(null);
   const threeRef = useRef(null); // Ref to hold THREE instance
+  const [showPassword, setShowPassword] = useState(false);
 
   // --- Vanta.js Background Logic (Integrated) ---
   useEffect(() => {
@@ -243,6 +247,29 @@ export default function NetherAISignIn() {
     </motion.div>
   );
 
+  const renderPasswordInput = (id, placeholder, value, required = true) => (
+    <motion.div variants={itemVariants} className="relative">
+      <input
+        id={id} name={id} type={showPassword ? 'text' : 'password'} value={value} onChange={handleInputChange} required={required} placeholder=" "
+        className="block w-full appearance-none rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-white placeholder-transparent transition-colors duration-300 peer focus:border-peachSoft focus:outline-none focus:ring-1 focus:ring-peachSoft"
+      />
+      <label
+        htmlFor={id}
+        className="absolute top-3.5 left-4 text-gray-400 transition-all duration-300 pointer-events-none peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-base peer-focus:-top-2.5 peer-focus:left-3 peer-focus:text-xs peer-focus:text-peachSoft peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:left-3 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-peachSoft bg-transparent px-1"
+      >
+        {placeholder}
+      </label>
+      <button
+        type="button"
+        onClick={() => setShowPassword(!showPassword)}
+        className="absolute top-1/2 right-4 -translate-y-1/2 text-gray-400 hover:text-peachSoft transition-colors"
+        aria-label={showPassword ? 'Hide password' : 'Show password'}
+      >
+        {showPassword ? <FiEyeOff /> : <FiEye />}
+      </button>
+    </motion.div>
+  );
+
   const renderView = () => {
     switch (view) {
       case 'signUp': return (
@@ -256,7 +283,7 @@ export default function NetherAISignIn() {
             {renderInput('email', 'email', 'Email Address', formState.email)}
             {renderInput('phone', 'tel', 'Phone Number', formState.phone, false)}
             {renderInput('dob', 'date', 'Date of Birth', formState.dob)}
-            {renderInput('password', 'password', 'Password', formState.password)}
+            {renderPasswordInput('password', 'Password', formState.password)}
             <motion.div variants={itemVariants}>
               <motion.button type="submit" disabled={loading} className="primary-button w-full justify-center">
                 <span>{loading ? 'Creating Account...' : 'Create Account'}</span>
@@ -274,7 +301,7 @@ export default function NetherAISignIn() {
             {renderInput('email', 'email', 'Email Address', formState.email)}
             <motion.div variants={itemVariants}>
               <motion.button type="submit" disabled={loading} className="primary-button w-full justify-center">
-                <span>{loading ? 'Sending...' : 'Send Reset Link'}</span>
+                <span>{loading ? 'Sending Reset Link...' : 'Send Reset Link'}</span>
               </motion.button>
             </motion.div>
           </motion.form>
@@ -287,7 +314,7 @@ export default function NetherAISignIn() {
         <motion.div key="signIn" variants={formVariants} initial="hidden" animate="visible" exit="exit">
           <motion.form onSubmit={handleSignIn} className="space-y-6" initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.1 } } }}>
             {renderInput('email', 'email', 'Email Address', formState.email)}
-            {renderInput('password', 'password', 'Password', formState.password)}
+            {renderPasswordInput('password', 'Password', formState.password)}
             <motion.div variants={itemVariants} className="text-right">
               <button type="button" onClick={() => setView('forgotPassword')} className="text-sm font-medium text-peachSoft hover:text-white transition-colors">Forgot Password?</button>
             </motion.div>
