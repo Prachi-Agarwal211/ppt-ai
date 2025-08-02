@@ -7,6 +7,12 @@ module.exports = {
   ],
   theme: {
     extend: {
+      colors: {
+        pinkBlush: '#fadadd',
+        peachSoft: '#ffe1c6',
+        pearlWhite: '#f8f8ff',
+        mauveLight: '#ebd8e6',
+      },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-conic':
