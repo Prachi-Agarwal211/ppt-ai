@@ -34,9 +34,6 @@ export default function DashboardPage() {
   // --- CORE HOOKS & CLIENTS ---
   const supabase = createClient();
   const router = useRouter();
-  const vantaRef = useRef(null);
-  const [vantaEffect, setVantaEffect] = useState(null);
-  const threeRef = useRef(null);
 
   // --- GLOBAL UI STATE ---
   const [loading, setLoading] = useState(true);
@@ -58,40 +55,7 @@ export default function DashboardPage() {
     checkUser();
   }, [router]);
 
-  // --- VANTA.JS BACKGROUND LOGIC ---
-  useEffect(() => {
-    const loadScript = (src) => new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${src}"]`)) return resolve();
-      const script = document.createElement('script');
-      script.src = src;
-      script.async = true;
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-
-    const initVanta = async () => {
-      try {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js');
-        threeRef.current = window.THREE;
-        await loadScript('https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.fog.min.js');
-
-        if (window.VANTA && vantaRef.current && !vantaEffect) {
-          setVantaEffect(
-            window.VANTA.FOG({
-              el: vantaRef.current, THREE: threeRef.current,
-              mouseControls: true, touchControls: true, gyroControls: false,
-              minHeight: 200.0, minWidth: 200.0, baseColor: 0x0,
-              highlightColor: 0x9c88ff, midtoneColor: 0x4d4480, lowlightColor: 0x19142b,
-              blurFactor: 0.55, speed: 1.2, zoom: 0.8,
-            })
-          );
-        }
-      } catch (error) { console.error("Vanta.js script loading failed:", error); }
-    };
-    initVanta();
-    return () => vantaEffect?.destroy();
-  }, [vantaRef]);
+  // --- VANTA.JS BACKGROUND LOGIC (Removed - now handled by layout.js) ---
 
   // --- HANDLERS ---
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/'); };
@@ -113,8 +77,9 @@ export default function DashboardPage() {
 
   // --- RENDER ---
   return (
-    <main className="h-screen w-full bg-black text-white flex flex-col font-sans relative overflow-hidden">
-      <div ref={vantaRef} className="absolute top-0 left-0 w-full h-full z-0" />
+    // REMOVED bg-black from main to allow Vanta.js to show through
+    <main className="h-screen w-full text-white flex flex-col font-sans relative overflow-hidden">
+      {/* Vanta.js background is now managed by layout.js */}
       <div className="relative z-10 flex flex-col flex-grow h-full">
         <Header 
           view={view} 

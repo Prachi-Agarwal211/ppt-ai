@@ -22,116 +22,7 @@ export default function NetherAISignIn() {
 
   // --- REFS & HOOKS ---
   const mainRef = useRef(null);
-  const vantaRef = useRef(null);
-  const [vantaEffect, setVantaEffect] = useState(null);
-  const threeRef = useRef(null); // Ref to hold THREE instance
   const [showPassword, setShowPassword] = useState(false);
-
-  // --- Vanta.js Background Logic (Integrated) ---
-  useEffect(() => {
-    // Function to load a script and return a promise
-    const loadScript = (src) => {
-      return new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${src}"]`)) {
-          resolve();
-          return;
-        }
-        const script = document.createElement('script');
-        script.src = src;
-        script.async = true;
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
-    };
-
-    const initVanta = async () => {
-      try {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js');
-        threeRef.current = window.THREE; // Store THREE in ref
-        await loadScript('https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.fog.min.js');
-
-        if (window.VANTA && vantaRef.current && !vantaEffect) {
-          const colorPalettes = [
-            { highlight: 0x9c88ff }, // Original Purple
-            { highlight: 0xff4b4b }, // Original Red
-            { highlight: 0x00c19b }, // Original Green
-            { highlight: 0xff8c00 }, // Original Orange
-          ];
-
-          setVantaEffect(
-            window.VANTA.FOG({
-              el: vantaRef.current,
-              THREE: threeRef.current,
-              mouseControls: true,
-              touchControls: true,
-              gyroControls: false,
-              minHeight: 200.0,
-              minWidth: 200.0,
-              baseColor: 0x0,
-              highlightColor: colorPalettes[0].highlight, // Initialize with first palette's highlight
-              midtoneColor: new threeRef.current.Color(colorPalettes[0].highlight).multiplyScalar(0.5).getHex(), // Derived
-              lowlightColor: new threeRef.current.Color(colorPalettes[0].highlight).multiplyScalar(0.2).getHex(), // Derived
-              blurFactor: 0.55,
-              speed: 1.2,
-              zoom: 0.8,
-            })
-          );
-        }
-      } catch (error) {
-        console.error("Vanta.js script loading failed:", error);
-      }
-    };
-
-    initVanta();
-
-    return () => {
-      if (vantaEffect) vantaEffect.destroy();
-    };
-  }, [vantaRef]); // Only re-run if the ref changes
-
-  useEffect(() => {
-    let animationFrameId;
-    if (vantaEffect && threeRef.current) {
-      const THREE = threeRef.current;
-      const colorPalettes = [
-        { highlight: 0x9c88ff },
-        { highlight: 0xff4b4b },
-        { highlight: 0x00c19b },
-        { highlight: 0xff8c00 },
-      ];
-      
-      let currentPaletteIndex = 0;
-      let nextPaletteIndex = 1;
-      let transitionProgress = 0;
-      const transitionSpeed = 0.0005; // Original speed
-
-      const animateColors = () => {
-        transitionProgress += transitionSpeed;
-        if (transitionProgress >= 1) {
-          transitionProgress = 0;
-          currentPaletteIndex = nextPaletteIndex;
-          nextPaletteIndex = (currentPaletteIndex + 1) % colorPalettes.length;
-        }
-        
-        const interpolatedColor = new THREE.Color(colorPalettes[currentPaletteIndex].highlight).lerp(new THREE.Color(colorPalettes[nextPaletteIndex].highlight), transitionProgress);
-
-        vantaEffect.setOptions({
-          highlightColor: interpolatedColor.getHex(),
-          midtoneColor: interpolatedColor.clone().multiplyScalar(0.5).getHex(),
-          lowlightColor: interpolatedColor.clone().multiplyScalar(0.2).getHex(),
-        });
-        
-        animationFrameId = requestAnimationFrame(animateColors);
-      };
-      
-      animateColors();
-    }
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [vantaEffect]);
-
 
   // --- STATE ---
   const [view, setView] = useState('signIn');
@@ -222,6 +113,9 @@ export default function NetherAISignIn() {
   };
 
   if (checkingSession) {
+    // This div is intended to cover the screen during session check.
+    // It should have some background to hide content, but if Vanta needs to show through, it needs to be transparent.
+    // For now, keeping it solid black for the "loading" state is fine.
     return <main className="min-h-screen w-full bg-black" />;
   }
   
@@ -339,8 +233,9 @@ export default function NetherAISignIn() {
   };
 
   return (
-    <main ref={mainRef} onMouseMove={handleMouseMove} className="min-h-screen w-full bg-black text-white flex items-center justify-center font-sans relative overflow-hidden p-4">
-      <div ref={vantaRef} className="absolute top-0 left-0 w-full h-full z-0" />
+    // REMOVED bg-black from main to allow Vanta.js to show through
+    <main ref={mainRef} onMouseMove={handleMouseMove} className="min-h-screen w-full text-white flex items-center justify-center font-sans relative p-4">
+      {/* Vanta.js background is now managed by layout.js */}
       <motion.div style={{ rotateX, rotateY }} className="holographic-modal holographic-container relative z-10 w-full max-w-md rounded-2xl bg-black/40 p-8">
         <div style={{ transform: 'translateZ(20px)' }} className="text-center mb-6">
           <AnimatedCharacters text="Nether AI" className="text-5xl md:text-6xl font-bold mother-of-pearl-text" />
