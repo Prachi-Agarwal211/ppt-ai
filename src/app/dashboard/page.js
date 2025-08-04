@@ -7,17 +7,28 @@ import {
   FiImage, FiVideo, FiMessageSquare, FiBarChart2, FiGitMerge,
   FiShare2, FiDownload, FiBriefcase, FiLink, FiClipboard, FiLogOut,
   FiUploadCloud, FiType, FiGlobe, FiSend, FiPaperclip, FiMenu, FiSettings,
-  FiPlus, FiTrash2, FiLayers, FiChevronsLeft, FiChevronsRight
+  FiPlus, FiTrash2, FiLayers, FiChevronsLeft, FiChevronsRight, FiLoader
 } from 'react-icons/fi';
 import { createClient } from '../../utils/supabase/client';
+import mammoth from 'mammoth';
+import mermaid from 'mermaid';
 
-// Mock data for initial state and history
-const initialSlides = [
-  { id: 1, title: 'The Future of Renewable Energy', points: ['Harnessing the power of tomorrow, today.', 'A presentation by Nether AI.'], notes: 'Start with a strong opening statement.' },
-  { id: 2, title: 'The Rise of Solar Power', points: ['Exponential growth in solar panel efficiency.', 'Decreasing costs making solar more accessible.'], notes: 'Mention key statistics.' },
-  { id: 3, title: 'Wind Energy: A Gentle Giant', points: ['Advancements in turbine design.', 'Offshore wind farms and their potential.'], notes: 'Discuss environmental impact.' },
-];
+// --- MERMAID CONFIG (RUNS ONCE ON CLIENT) ---
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'dark',
+  securityLevel: 'loose',
+  themeVariables: {
+    background: '#1a1a2e',
+    primaryColor: '#3a3a5e',
+    primaryTextColor: '#f8f8ff',
+    lineColor: '#f8f8ff',
+    textColor: '#f8f8ff',
+  }
+});
 
+
+// Mock data for history (can be replaced with API call)
 const presentationHistory = [
     { id: 'pres-1', title: 'Quarterly Business Review', date: '2 days ago' },
     { id: 'pres-2', title: 'Marketing Strategy Q3', date: '1 week ago' },
@@ -37,6 +48,8 @@ export default function DashboardPage() {
 
   // --- GLOBAL UI STATE ---
   const [loading, setLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false); // For AI generation
+  const [generationError, setGenerationError] = useState('');
   const [view, setView] = useState('idea'); // 'idea', 'outline', 'deck', 'presentation'
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
@@ -55,17 +68,40 @@ export default function DashboardPage() {
     checkUser();
   }, [router]);
 
-  // --- VANTA.JS BACKGROUND LOGIC (Removed - now handled by layout.js) ---
-
   // --- HANDLERS ---
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/'); };
-  const handleStartPresentation = (config) => {
-    // In a real app, you'd generate slides based on the config from an API
-    console.log("Starting presentation with config:", config);
-    setSlides(initialSlides);
-    setActiveSlideId(initialSlides[0]?.id);
-    setView('outline');
+
+  const handleStartPresentation = async (config) => {
+    setIsGenerating(true);
+    setGenerationError('');
+    console.log("Starting presentation generation with config:", config);
+    
+    try {
+      const response = await fetch('/api/generate-presentation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate presentation.');
+      }
+
+      const { slides: newSlides } = await response.json();
+      
+      setSlides(newSlides);
+      setActiveSlideId(newSlides[0]?.id);
+      setView('outline');
+
+    } catch (error) {
+      console.error("Presentation generation failed:", error);
+      setGenerationError(error.message);
+    } finally {
+      setIsGenerating(false);
+    }
   };
+
   const handleSlideChange = (id) => setActiveSlideId(id);
   const handleUpdateSlide = (id, field, value) => {
     setSlides(slides.map(s => s.id === id ? { ...s, [field]: field === 'points' ? value.split('\n') : value } : s));
@@ -77,9 +113,7 @@ export default function DashboardPage() {
 
   // --- RENDER ---
   return (
-    // REMOVED bg-black from main to allow Vanta.js to show through
     <main className="h-screen w-full text-white flex flex-col font-sans relative overflow-hidden">
-      {/* Vanta.js background is now managed by layout.js */}
       <div className="relative z-10 flex flex-col flex-grow h-full">
         <Header 
           view={view} 
@@ -89,7 +123,6 @@ export default function DashboardPage() {
           onLogout={handleLogout} 
         />
         <div className="flex-grow flex overflow-hidden">
-          {/* Left Sidebar for Outline and Deck views */}
           <AnimatePresence>
             {(view === 'outline' || view === 'deck') && (
               <motion.aside 
@@ -104,16 +137,21 @@ export default function DashboardPage() {
             )}
           </AnimatePresence>
 
-          {/* Main Content Area */}
           <main className="flex-grow p-6 flex flex-col overflow-y-auto">
             <AnimatePresence mode="wait">
-              {view === 'idea' && <IdeaView key="idea" onStart={handleStartPresentation} />}
+              {view === 'idea' && (
+                <IdeaView 
+                  key="idea" 
+                  onStart={handleStartPresentation} 
+                  isGenerating={isGenerating}
+                  error={generationError}
+                />
+              )}
               {view === 'outline' && <OutlineView key="outline" slide={activeSlide} onUpdate={handleUpdateSlide} onProceed={() => setView('deck')} />}
               {view === 'deck' && <DeckView key="deck" slide={activeSlide} />}
             </AnimatePresence>
           </main>
 
-          {/* Right Sidebar */}
           <AnimatePresence>
             {isRightSidebarOpen && (
               <motion.aside 
@@ -130,12 +168,12 @@ export default function DashboardPage() {
           </AnimatePresence>
         </div>
       </div>
-      {/* Modals and Fullscreen Views */}
       <PresentationView isVisible={view === 'presentation'} slides={slides} onClose={() => setView('deck')} />
       <ShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />
     </main>
   );
 }
+
 
 /**
  * ====================================================================
@@ -153,6 +191,7 @@ const Header = ({ view, setView, onShare, onPresent, onLogout }) => (
           key={item.key} 
           onClick={()=>setView(item.key)} 
           className={`relative px-4 py-2 text-sm font-medium rounded-full transition-colors duration-300 ${view===item.key?'text-white':'text-gray-400 hover:text-white'}`}
+          disabled={!item.key === 'idea' && !slides.length} // Disable if not idea and no slides
         >
           {view===item.key&&<motion.div layoutId="nav-underline" className="absolute inset-0 bg-white/10 rounded-full" transition={{type:'spring',stiffness:300,damping:30}}/>} 
           <span className="relative z-10 flex items-center gap-2"><item.icon/> {item.name}</span>
@@ -174,22 +213,38 @@ const Header = ({ view, setView, onShare, onPresent, onLogout }) => (
  * Idea View Components
  * ====================================================================
  */
-const IdeaView = ({ onStart }) => {
-  const [inputMode, setInputMode] = useState('text'); // 'text', 'link', 'file'
+const IdeaView = ({ onStart, isGenerating, error }) => {
+  const [inputMode, setInputMode] = useState('text');
   const [text, setText] = useState('');
   const [link, setLink] = useState('');
   const [file, setFile] = useState(null);
+  const [slideCount, setSlideCount] = useState(7); // State for the slide count input
   const fileInputRef = useRef(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isGenerating) return;
+
     let config = {};
-    if (inputMode === 'text' && text.trim()) config = { type: 'text', content: text };
-    if (inputMode === 'link' && link.trim()) config = { type: 'link', content: link };
-    if (inputMode === 'file' && file) config = { type: 'file', content: file.name };
+    if (inputMode === 'text' && text.trim()) {
+      config = { type: 'text', content: text };
+    } else if (inputMode === 'link' && link.trim()) {
+      config = { type: 'link', content: link };
+    } else if (inputMode === 'file' && file) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        config = { type: 'text', content: result.value };
+      } catch (err) {
+        console.error('Error reading docx file:', err);
+        alert('Could not read the content of the selected file. Please try another one.');
+        return;
+      }
+    }
     
     if (Object.keys(config).length > 0) {
-      onStart(config);
+      // Add the slide count to the config object before sending
+      onStart({ ...config, slideCount });
     }
   };
 
@@ -218,15 +273,31 @@ const IdeaView = ({ onStart }) => {
             {inputMode === 'file' && (
               <motion.div key="file" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}}>
                 <label htmlFor="file-upload" className="w-full flex flex-col items-center justify-center bg-white/5 rounded-lg p-6 border-2 border-dashed border-white/20 cursor-pointer hover:bg-white/10">
-                  {file ? <p>{file.name}</p> : <><FiUploadCloud className="text-3xl mb-2" /><p>Click to upload a document</p></>}
+                  {file ? <p>{file.name}</p> : <><FiUploadCloud className="text-3xl mb-2" /><p>Click to upload a document (.docx)</p></>}
                 </label>
-                <input id="file-upload" ref={fileInputRef} type="file" className="sr-only" onChange={e => setFile(e.target.files[0])} />
+                <input id="file-upload" ref={fileInputRef} type="file" className="sr-only" accept=".docx" onChange={e => setFile(e.target.files[0])} />
               </motion.div>
             )}
           </AnimatePresence>
-          <button type="submit" className="primary-button w-full justify-center mt-4">
-            <FiCpu className="mr-2" /> Generate Presentation
+          
+          <div className="mt-4">
+              <label htmlFor="slide-count" className="block text-sm font-medium text-gray-300 mb-2">Number of Slides</label>
+              <input
+                type="number"
+                id="slide-count"
+                name="slide-count"
+                value={slideCount}
+                onChange={(e) => setSlideCount(parseInt(e.target.value, 10))}
+                min="3"
+                max="15"
+                className="w-full bg-white/5 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-peachSoft"
+              />
+          </div>
+
+          <button type="submit" disabled={isGenerating} className="primary-button w-full justify-center mt-4">
+            {isGenerating ? <><FiLoader className="mr-2 animate-spin" /> Generating...</> : <><FiCpu className="mr-2" /> Generate Presentation</>}
           </button>
+          {error && <p className="text-red-400 text-sm text-center mt-2">{error}</p>}
         </form>
       </div>
     </motion.div>
@@ -246,6 +317,7 @@ const HistorySidebar = ({ history }) => (
     </div>
   </>
 );
+
 
 /**
  * ====================================================================
@@ -295,11 +367,35 @@ const Toolbox = () => (
     </div>
 );
 
+
 /**
  * ====================================================================
- * Deck View Components
+ * Deck View Components for Mermaid
  * ====================================================================
  */
+const MermaidDiagram = ({ chart }) => {
+  const ref = useRef(null);
+  
+  useEffect(() => {
+    if (ref.current && chart) {
+      ref.current.innerHTML = '';
+      try {
+        mermaid.render(`mermaid-${Date.now()}`, chart, (svgCode) => {
+          if (ref.current) {
+             ref.current.innerHTML = svgCode;
+          }
+        });
+      } catch (e) {
+        console.error("Mermaid render error:", e);
+        ref.current.innerHTML = "Error rendering diagram.";
+      }
+    }
+  }, [chart]);
+
+  return <div ref={ref} className="w-full h-full flex items-center justify-center mermaid-diagram-container" />;
+};
+
+
 const DeckView = ({ slide }) => {
   if (!slide) return <div className="flex h-full items-center justify-center text-gray-400">Select a slide to preview.</div>;
 
@@ -315,9 +411,15 @@ const DeckView = ({ slide }) => {
             className="w-full h-full flex flex-col justify-center items-center text-center"
           >
             <h2 className="text-4xl font-bold text-white mb-4">{slide.title}</h2>
-            <ul className="space-y-2 text-xl text-gray-300">
-              {slide.points.map((point, i) => <li key={i}>{point}</li>)}
-            </ul>
+            <div className="space-y-2 text-xl text-gray-300 w-full h-full">
+              {slide.points.map((point, i) => {
+                const isMermaid = point.trim().startsWith('graph') || point.trim().startsWith('sequenceDiagram') || point.trim().startsWith('gantt');
+                if (isMermaid) {
+                  return <MermaidDiagram key={i} chart={point} />;
+                }
+                return <p key={i}>{point}</p>;
+              })}
+            </div>
           </motion.div>
         </AnimatePresence>
       </div>
