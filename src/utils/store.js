@@ -4,7 +4,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 const supabase = createClient();
 
-// Helper function to reorder arrays
 const reorder = (list, startIndex, endIndex) => {
     const result = Array.from(list);
     const [removed] = result.splice(startIndex, 1);
@@ -20,191 +19,154 @@ export const usePresentationStore = create((set, get) => ({
   presentationsHistory: [],
   isGenerating: false,
   generationError: '',
+  generationStatus: '', // e.g., 'Started', 'Streaming', 'Saving'
   historyLoading: true,
   realtimeChannel: null,
   
   // --- ACTIONS ---
   
   setActiveSlideId: (id) => {
-    const slides = get().slides;
-    const index = slides.findIndex(s => s.id === id);
+    const index = get().slides.findIndex(s => s.id === id);
     if (index !== -1) {
       set({ activeSlideId: id, currentSlideIndex: index });
     }
   },
 
-  nextSlide: () => {
-    const { slides, currentSlideIndex } = get();
-    if (currentSlideIndex < slides.length - 1) {
-      const nextIndex = currentSlideIndex + 1;
-      set({ currentSlideIndex: nextIndex, activeSlideId: slides[nextIndex].id });
+  nextSlide: () => set(state => {
+    if (state.currentSlideIndex < state.slides.length - 1) {
+      const nextIndex = state.currentSlideIndex + 1;
+      return { currentSlideIndex: nextIndex, activeSlideId: state.slides[nextIndex].id };
     }
-  },
+    return {};
+  }),
 
-  prevSlide: () => {
-    const { slides, currentSlideIndex } = get();
-    if (currentSlideIndex > 0) {
-      const prevIndex = currentSlideIndex - 1;
-      set({ currentSlideIndex: prevIndex, activeSlideId: slides[prevIndex].id });
+  prevSlide: () => set(state => {
+    if (state.currentSlideIndex > 0) {
+      const prevIndex = state.currentSlideIndex - 1;
+      return { currentSlideIndex: prevIndex, activeSlideId: state.slides[prevIndex].id };
     }
-  },
+    return {};
+  }),
 
-  // Updates slide content LOCALLY
-  updateSlide: (id, field, value) => {
-    set(state => ({
-      slides: state.slides.map(s => 
-        s.id === id ? { ...s, [field]: value } : s
-      )
-    }));
-  },
+  updateSlide: (id, field, value) => set(state => ({
+    slides: state.slides.map(s => 
+      s.id === id ? { ...s, [field]: value } : s
+    )
+  })),
 
-  // NEW: Updates a single slide's content in the DATABASE
   updateSlideInDB: async (slideData) => {
+    if (typeof slideData.id === 'string' && slideData.id.startsWith('new-')) return;
     const { error } = await supabase
       .from('slides')
-      .update({
-        title: slideData.title,
-        points: slideData.points,
-        notes: slideData.notes
-      })
+      .update({ title: slideData.title, points: slideData.points, notes: slideData.notes })
       .eq('id', slideData.id);
-    if (error) {
-      console.error("Failed to save slide content:", error);
-    }
+    if (error) console.error("Failed to save slide content:", error);
   },
 
-  // NEW: Reorders slides LOCALLY and saves the new order to the DATABASE
   reorderSlides: async (startIndex, endIndex) => {
     const originalSlides = get().slides;
     const reorderedSlides = reorder(originalSlides, startIndex, endIndex);
     
-    // Optimistic UI update
-    set({ slides: reorderedSlides });
+    set({ slides: reorderedSlides }); // Optimistic update
 
-    // Prepare data for the backend
     const updates = reorderedSlides.map((slide, index) => ({
       id: slide.id,
       order: index + 1,
     }));
     
-    // Update the database
-    // Using Promise.all to send all updates concurrently
-    const { error } = await Promise.all(
-        updates.map(update => 
-            supabase.from('slides').update({ order: update.order }).eq('id', update.id)
-        )
-    );
+    const { error } = await supabase.from('slides').upsert(updates);
 
     if (error) {
         console.error("Failed to save new slide order:", error);
-        // If it fails, revert to the original order to keep UI consistent
-        set({ slides: originalSlides });
+        set({ slides: originalSlides, generationError: "Could not save slide order." }); // Revert
     }
   },
   
-  addSlide: () => {
+  addSlide: async () => {
     const presentationId = get().slides[0]?.presentation_id;
     if (!presentationId) return;
     
-    const newSlide = {
-      id: `new-${Date.now()}`,
-      presentation_id: presentationId,
-      slide_number: get().slides.length + 1,
-      order: get().slides.length + 1,
-      title: 'New Slide',
-      points: ['Add your content here.'],
-      notes: '',
-      image_suggestion: '',
-    };
-    set(state => ({ slides: [...state.slides, newSlide] }));
+    const newOrder = get().slides.length + 1;
+    const { data, error } = await supabase
+      .from('slides')
+      .insert({ presentation_id: presentationId, order: newOrder, slide_number: newOrder, title: 'New Slide', points: ['Add content.'] })
+      .select().single();
+      
+    if (error) {
+        set({ generationError: "Failed to add new slide." });
+    } else {
+        set(state => ({ slides: [...state.slides, data], activeSlideId: data.id, currentSlideIndex: state.slides.length }));
+    }
   },
 
-  deleteSlide: (id) => {
-    set(state => ({
-      slides: state.slides.filter(s => s.id !== id),
-      activeSlideId: state.activeSlideId === id ? (state.slides[0]?.id || null) : state.activeSlideId,
-    }));
-    const { slides, activeSlideId } = get();
-    const newIndex = slides.findIndex(s => s.id === activeSlideId);
-    set({ currentSlideIndex: newIndex >= 0 ? newIndex : 0 });
+  deleteSlide: async (id) => {
+    const originalSlides = [...get().slides];
+    const newSlides = originalSlides.filter(s => s.id !== id);
+    set({ slides: newSlides });
+    
+    if (typeof id === 'number') {
+        const { error } = await supabase.from('slides').delete().eq('id', id);
+        if (error) {
+            console.error('Failed to delete slide:', error);
+            set({ slides: originalSlides, generationError: "Failed to delete slide." });
+        }
+    }
   },
 
   fetchHistory: async () => {
     set({ historyLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-        set({ historyLoading: false });
-        return;
-    }
+    if (!user) { set({ historyLoading: false, presentationsHistory: [] }); return; }
 
     const { data, error } = await supabase
-      .from('presentations')
-      .select('id, title, created_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+      .from('presentations').select('id, title, created_at').eq('user_id', user.id).order('created_at', { ascending: false });
       
-    if (!error) {
-      set({ presentationsHistory: data });
-    } else {
-      console.error("Failed to fetch history:", error);
-    }
+    if (!error) set({ presentationsHistory: data });
     set({ historyLoading: false });
   },
 
   loadPresentation: async (presentationId) => {
-    const { data: slides, error } = await supabase
-      .from('slides')
-      .select('*')
-      .eq('presentation_id', presentationId)
-      .order('order', { ascending: true });
-    
-    if (!error && slides.length > 0) {
-      set({
-        slides,
-        activeSlideId: slides[0].id,
-        currentSlideIndex: 0,
-        generationError: ''
-      });
+    const { data, error } = await supabase.from('slides').select('*').eq('presentation_id', presentationId).order('order', { ascending: true });
+    if (!error && data.length > 0) {
+      set({ slides: data, activeSlideId: data[0].id, currentSlideIndex: 0, generationError: '' });
       return true;
-    } else {
-      console.error("Failed to load presentation slides:", error);
-      set({ generationError: 'Failed to load presentation.' });
-      return false;
     }
+    set({ generationError: 'Failed to load presentation.' });
+    return false;
   },
 
   startPresentation: async (config) => {
-    set({ isGenerating: true, generationError: '', slides: [], activeSlideId: null });
+    set({ isGenerating: true, generationError: '', generationStatus: 'Initializing...', slides: [] });
     
     const channelId = `generation-${uuidv4()}`;
     const channel = supabase.channel(channelId);
+    
     channel
-      .on('broadcast', { event: 'slide' }, ({ payload }) => {
-        set(state => ({
-            slides: [...state.slides, payload],
-            activeSlideId: state.activeSlideId || payload.id,
-        }));
-      })
-      .on('broadcast', { event: 'error' }, ({ payload }) => {
-        set({ generationError: payload.message, isGenerating: false });
-        get().disconnectRealtimeChannel();
+      .on('broadcast', { event: 'start' }, () => {
+        set({ generationStatus: 'Generating content...' });
       })
       .on('broadcast', { event: 'complete' }, ({ payload }) => {
-        set({ isGenerating: false });
+        get().loadPresentation(payload.presentationId);
+        set({ isGenerating: false, generationStatus: 'Complete!' });
         get().fetchHistory();
         get().disconnectRealtimeChannel();
       })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          fetch('/api/generate-presentation', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...config, channelId }),
-          });
-        }
-      });
+      .on('broadcast', { event: 'error' }, ({ payload }) => {
+        set({ generationError: payload.message, isGenerating: false, generationStatus: 'Error' });
+        get().disconnectRealtimeChannel();
+      })
+      .subscribe();
       
     set({ realtimeChannel: channel });
+
+    // The API route will handle the streaming and DB saving.
+    // We just need to kick it off.
+    fetch('/api/generate-presentation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...config, channelId }),
+    });
+
     return true;
   },
   

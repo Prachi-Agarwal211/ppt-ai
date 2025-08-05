@@ -1,9 +1,17 @@
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'; // THE ONLY CHANGE IS THIS LINE
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { FiPlus, FiTrash2, FiLoader } from 'react-icons/fi';
 import { usePresentationStore } from '../../../utils/store';
 
 export const LeftSidebar = () => {
-    const { slides, activeSlideId, setActiveSlideId, addSlide, deleteSlide, reorderSlides, isGenerating } = usePresentationStore();
+    const { 
+        slides, 
+        activeSlideId, 
+        setActiveSlideId, 
+        addSlide, 
+        deleteSlide, 
+        reorderSlides, 
+        isGenerating 
+    } = usePresentationStore();
 
     const onDragEnd = (result) => {
         if (!result.destination) {
@@ -21,8 +29,13 @@ export const LeftSidebar = () => {
                         <div {...provided.droppableProps} ref={provided.innerRef} className="flex-grow overflow-y-auto -mr-2 pr-2 space-y-2">
                             {slides.map((slide, index) => (
                                 <Draggable key={slide.id} draggableId={slide.id.toString()} index={index}>
-                                    {(provided) => (
-                                        <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className="group relative">
+                                    {(providedDrag) => (
+                                        <div 
+                                          ref={providedDrag.innerRef} 
+                                          {...providedDrag.draggableProps} 
+                                          {...providedDrag.dragHandleProps} 
+                                          className="group relative"
+                                        >
                                             <button 
                                                 onClick={() => setActiveSlideId(slide.id)} 
                                                 className={`w-full text-left p-3 rounded-lg transition-colors duration-200 flex items-start gap-3 ${activeSlideId === slide.id ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}

@@ -4,29 +4,24 @@ import { Toolbox } from './Toolbox';
 import { FiLayout } from 'react-icons/fi';
 import { useEffect, useState, useRef } from 'react';
 
-// --- NEW DEBOUNCING HOOK (Defined within the component file) ---
 const useDebouncedSave = (slide, delay = 1500) => {
     const { updateSlideInDB } = usePresentationStore();
     const [isSaving, setIsSaving] = useState(false);
     const timeoutRef = useRef(null);
 
     useEffect(() => {
-        if (!slide) return;
+        if (!slide || (typeof slide.id === 'string' && slide.id.startsWith('new-'))) return;
 
-        // Clear any existing timer
         if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
         }
 
-        // Set a new timer
-        timeoutRef.current = setTimeout(() => {
+        timeoutRef.current = setTimeout(async () => {
             setIsSaving(true);
-            updateSlideInDB(slide).then(() => {
-                setIsSaving(false);
-            });
+            await updateSlideInDB(slide);
+            setIsSaving(false);
         }, delay);
 
-        // Cleanup timer on component unmount or when slide changes
         return () => {
             if (timeoutRef.current) {
                 clearTimeout(timeoutRef.current);
@@ -36,7 +31,6 @@ const useDebouncedSave = (slide, delay = 1500) => {
 
     return isSaving;
 };
-
 
 export const OutlineView = ({ onProceed }) => {
   const { slide, updateSlide } = usePresentationStore(state => ({
@@ -48,6 +42,13 @@ export const OutlineView = ({ onProceed }) => {
 
   if (!slide) return <div className="flex h-full items-center justify-center text-gray-400">Select a slide to begin editing.</div>;
   
+  const handlePointsChange = (e) => {
+    // Ensure points are always stored as an array, even when the textarea is cleared
+    const value = e.target.value;
+    const pointsArray = value === '' ? [] : value.split('\n');
+    updateSlide(slide.id, 'points', pointsArray);
+  };
+
   return (
     <motion.div key="outline" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} className="h-full flex flex-col">
       <div className="flex-grow overflow-y-auto pr-4 space-y-6">
@@ -59,8 +60,8 @@ export const OutlineView = ({ onProceed }) => {
           <input type="text" value={slide.title} onChange={(e) => updateSlide(slide.id, 'title', e.target.value)} className="mt-1 block w-full text-2xl font-bold rounded-lg border border-transparent bg-transparent px-2 py-1 text-white focus:outline-none focus:border-white/20 focus:bg-white/5" />
         </div>
         <div>
-          <label className="text-sm font-medium text-gray-300">Content</label>
-          <textarea value={Array.isArray(slide.points) ? slide.points.join('\n') : ''} onChange={(e) => updateSlide(slide.id, 'points', e.target.value.split('\n'))} rows={8} className="mt-1 block w-full rounded-lg border border-transparent bg-transparent px-2 py-1 text-white resize-none focus:outline-none focus:border-white/20 focus:bg-white/5" />
+          <label className="text-sm font-medium text-gray-300">Content (one bullet point per line)</label>
+          <textarea value={Array.isArray(slide.points) ? slide.points.join('\n') : ''} onChange={handlePointsChange} rows={8} className="mt-1 block w-full rounded-lg border border-transparent bg-transparent px-2 py-1 text-white resize-none focus:outline-none focus:border-white/20 focus:bg-white/5" />
         </div>
         <div>
           <label className="text-sm font-medium text-gray-300">Speaker Notes</label>

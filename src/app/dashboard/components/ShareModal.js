@@ -6,15 +6,16 @@ import { createClient } from '../../../utils/supabase/client';
 
 export const ShareModal = ({ isOpen, onClose }) => {
     const supabase = createClient();
-    const { activeSlideId, slides } = usePresentationStore();
+    const slides = usePresentationStore(state => state.slides);
     const [presentationData, setPresentationData] = useState(null);
     const [isPublic, setIsPublic] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         const fetchPresentationStatus = async () => {
             if (isOpen && slides.length > 0) {
+                setIsLoading(true);
                 const presentationId = slides[0].presentation_id;
                 const { data, error } = await supabase
                     .from('presentations')
@@ -25,7 +26,10 @@ export const ShareModal = ({ isOpen, onClose }) => {
                 if (!error && data) {
                     setPresentationData(data);
                     setIsPublic(data.is_public);
+                } else if (error) {
+                    console.error("Error fetching presentation status:", error);
                 }
+                setIsLoading(false);
             }
         };
         fetchPresentationStatus();
@@ -34,13 +38,17 @@ export const ShareModal = ({ isOpen, onClose }) => {
     const handleTogglePublic = async () => {
         setIsLoading(true);
         const presentationId = slides[0].presentation_id;
-        const { error } = await supabase
+        const newPublicStatus = !isPublic;
+        const { data, error } = await supabase
             .from('presentations')
-            .update({ is_public: !isPublic })
-            .eq('id', presentationId);
+            .update({ is_public: newPublicStatus })
+            .eq('id', presentationId)
+            .select('share_id')
+            .single();
         
         if (!error) {
-            setIsPublic(!isPublic);
+            setIsPublic(newPublicStatus);
+            setPresentationData(prev => ({ ...prev, share_id: data.share_id }));
         } else {
             console.error("Failed to update public status", error);
         }
@@ -70,16 +78,28 @@ export const ShareModal = ({ isOpen, onClose }) => {
                                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isPublic ? 'translate-x-6' : 'translate-x-1'}`} />
                             </button>
                         </div>
+                        
+                        <AnimatePresence>
                         {isPublic && (
-                             <div className="flex items-center gap-2">
-                                <FiLink className="text-gray-400" />
-                                <input type="text" readOnly value={shareUrl} className="w-full bg-white/5 p-2 rounded text-gray-300" />
-                                <motion.button onClick={handleCopyLink} className="secondary-button p-2">
+                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex items-center gap-2">
+                                <FiLink className="text-gray-400 flex-shrink-0" />
+                                <input type="text" readOnly value={shareUrl} className="w-full bg-white/5 p-2 rounded text-gray-300 text-sm" />
+                                <motion.button onClick={handleCopyLink} className="secondary-button p-2 flex-shrink-0">
                                     {copied ? <FiCheck size={20} className="text-green-400" /> : <FiClipboard size={20} />}
                                 </motion.button>
-                            </div>
+                            </motion.div>
                         )}
-                        {!isPublic && <p className="text-sm text-gray-400 text-center p-4 bg-white/5 rounded-lg">Enable public access to get a shareable link.</p>}
+                        </AnimatePresence>
+                        
+                        {!isPublic && !isLoading && (
+                            <p className="text-sm text-gray-400 text-center p-4 bg-white/5 rounded-lg">Enable public access to get a shareable link.</p>
+                        )}
+
+                        {isLoading && !isPublic && (
+                             <div className="w-full h-10 flex items-center justify-center">
+                                <FiLoader className="animate-spin text-white"/>
+                             </div>
+                        )}
                     </motion.div>
                 </motion.div>
             )}
