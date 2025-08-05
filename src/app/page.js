@@ -2,29 +2,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FaGoogle } from 'react-icons/fa';
-import { FiEye, FiEyeOff } from 'react-icons/fi';
+import { FiEye, FiEyeOff, FiLoader } from 'react-icons/fi';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { createClient } from '../utils/supabase/client';
 
+const isValidEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 /**
  * NetherAISignIn Component - v18 (UI/UX Enhanced)
- *
- * This component now features:
- * - Direct Vanta.js integration for a consistent, color-changing background.
- * - All purple accents are replaced with a cohesive 'peachSoft' off-white theme.
- * - Buttons are correctly styled with `primary-button` and `secondary-button`.
- * - Added password visibility toggle for improved UX.
- * - Enhanced form submission feedback and error handling.
  */
 export default function NetherAISignIn() {
   const supabase = createClient();
   const router = useRouter();
 
-  // --- REFS & HOOKS ---
   const mainRef = useRef(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  // --- STATE ---
   const [view, setView] = useState('signIn');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -34,7 +30,6 @@ export default function NetherAISignIn() {
     email: '', password: '', firstName: '', lastName: '', username: '', dob: '', phone: '',
   });
 
-  // --- SESSION & AUTH LOGIC ---
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -57,8 +52,24 @@ export default function NetherAISignIn() {
   };
 
   const handleSignUp = async (e) => {
-    e.preventDefault(); setLoading(true); setError(''); setMessage('');
-    const { email, password, firstName, lastName, username, dob, phone } = formState;
+    e.preventDefault();
+    const { email, password } = formState;
+
+    if (!email || !password || !formState.firstName || !formState.lastName) {
+      setError('Please fill in all required fields.');
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    setLoading(true); setError(''); setMessage('');
+    const { firstName, lastName, username, dob, phone } = formState;
     const { data, error } = await supabase.auth.signUp({
       email, password, phone,
       options: { data: { first_name: firstName, last_name: lastName, username, date_of_birth: dob, phone }, emailRedirectTo: `${window.location.origin}/` },
@@ -70,13 +81,26 @@ export default function NetherAISignIn() {
   };
 
   const handleSignIn = async (e) => {
-    e.preventDefault(); setLoading(true); setError(''); setMessage('');
+    e.preventDefault();
+    const { email, password } = formState;
+
+    if (!email || !password) {
+      setError('Please enter your email and password.');
+      return;
+    }
+
+    setLoading(true); setError(''); setMessage('');
     const { error } = await supabase.auth.signInWithPassword({ email: formState.email, password: formState.password });
     if (error) { setError(error.message); setLoading(false); }
   };
   
   const handlePasswordReset = async (e) => {
-    e.preventDefault(); setLoading(true); setError(''); setMessage('');
+    e.preventDefault();
+    if (!formState.email || !isValidEmail(formState.email)) {
+        setError('Please enter a valid email address to reset your password.');
+        return;
+    }
+    setLoading(true); setError(''); setMessage('');
     const { error } = await supabase.auth.resetPasswordForEmail(formState.email, { redirectTo: `${window.location.origin}/update-password` });
     if (error) setError(error.message);
     else setMessage('Password reset link sent! Please check your email.');
@@ -89,7 +113,6 @@ export default function NetherAISignIn() {
     if (error) { setError(`Error signing in with ${provider}: ${error.message}`); setLoading(false); }
   };
 
-  // --- UI & ANIMATION LOGIC ---
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const rotateX = useTransform(y, [-400, 400], [10, -10]);
@@ -113,10 +136,12 @@ export default function NetherAISignIn() {
   };
 
   if (checkingSession) {
-    // This div is intended to cover the screen during session check.
-    // It should have some background to hide content, but if Vanta needs to show through, it needs to be transparent.
-    // For now, keeping it solid black for the "loading" state is fine.
-    return <main className="min-h-screen w-full bg-black" />;
+    return (
+      <main className="min-h-screen w-full bg-black flex flex-col items-center justify-center text-white font-sans">
+        <FiLoader className="text-4xl animate-spin text-peachSoft mb-4" />
+        <p className="text-gray-400">Authenticating Session...</p>
+      </main>
+    );
   }
   
   const formVariants = {
@@ -233,9 +258,7 @@ export default function NetherAISignIn() {
   };
 
   return (
-    // REMOVED bg-black from main to allow Vanta.js to show through
     <main ref={mainRef} onMouseMove={handleMouseMove} className="min-h-screen w-full text-white flex items-center justify-center font-sans relative p-4">
-      {/* Vanta.js background is now managed by layout.js */}
       <motion.div style={{ rotateX, rotateY }} className="holographic-modal holographic-container relative z-10 w-full max-w-md rounded-2xl bg-black/40 p-8">
         <div style={{ transform: 'translateZ(20px)' }} className="text-center mb-6">
           <AnimatedCharacters text="Nether AI" className="text-5xl md:text-6xl font-bold mother-of-pearl-text" />

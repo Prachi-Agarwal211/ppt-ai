@@ -9,10 +9,12 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
     "@react-three/drei": "^10.6.1",
     "@react-three/fiber": "^9.3.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.43.4",
+    "ai": "^5.0.2",
     "framer-motion": "^12.23.12",
     "mammoth": "^1.7.2",
     "mermaid": "^11.9.0",

@@ -1,31 +1,54 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { OpenAIStream, StreamingTextResponse } from 'ai';
+import { createClient } from '@supabase/supabase-js';
 
 // This line forces the route to be fully dynamic, which is the correct approach.
 export const dynamic = 'force-dynamic';
+// Increase the max duration for streaming responses
+export const maxDuration = 60; 
 
-// --- MAIN API HANDLER ---
+// A simple parser to find JSON objects in a stream
+function findJsonObjects(str) {
+    const objects = [];
+    let braceCount = 0;
+    let startIndex = -1;
+
+    for (let i = 0; i < str.length; i++) {
+        if (str[i] === '{') {
+            if (braceCount === 0) {
+                startIndex = i;
+            }
+            braceCount++;
+        } else if (str[i] === '}') {
+            braceCount--;
+            if (braceCount === 0 && startIndex !== -1) {
+                objects.push(str.substring(startIndex, i + 1));
+                startIndex = -1;
+            }
+        }
+    }
+    return objects;
+}
+
+
 export async function POST(request) {
-  const { type, content, slideCount } = await request.json();
+  const { content, slideCount, channelId } = await request.json(); // channelId is new
   const cookieStore = cookies();
 
+  // Create a Supabase client for user auth
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        get(name) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name, value, options) {
-          cookieStore.set({ name, value, ...options });
-        },
-        remove(name, options) {
-          cookieStore.set({ name, value: '', ...options });
-        },
-      },
-    }
+    { cookies: { get: (name) => cookieStore.get(name)?.value } }
+  );
+  
+  // Create a separate Admin client to broadcast messages from the server
+  // This is secure because this code only runs on the server
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
   const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -34,135 +57,116 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = user.id;
+  // --- Realtime Setup ---
+  const channel = supabaseAdmin.channel(channelId);
 
   try {
     const topic = content;
-
     const masterPrompt = `
-      You are an expert presentation creator. Your task is to generate a full ${slideCount}-slide presentation about "${topic}".
+      You are an expert presentation creator. Your task is to generate a full ${slideCount}-slide presentation based on the topic provided below.
 
-      For each slide:
-        - "title": string
-        - "points": array of 2–4 concise bullet points
-        - "detailed_content": one rich explanatory paragraph
-        - "image_suggestion": descriptive visual idea
+      --- USER TOPIC START ---
+      ${topic}
+      --- USER TOPIC END ---
 
-      Output ONLY a JSON object in this format:
+      For each slide, you must provide:
+        - "title": A string for the slide title.
+        - "points": An array of 2 to 4 concise bullet points (strings).
+        - "detailed_content": A single, rich, explanatory paragraph.
+        - "image_suggestion": A descriptive suggestion for a relevant visual aid.
+
+      Your entire output must be ONLY a single, raw JSON object in the following format, with no other text, markdown, or explanations.
+      
       {
         "slides": [
-          {
-            "title": "Exact Slide Title",
-            "points": ["Point 1", "Point 2"],
-            "detailed_content": "A complete paragraph with depth and clarity.",
-            "image_suggestion": "A futuristic diagram showing..."
-          }
+          { "title": "...", "points": [], "detailed_content": "...", "image_suggestion": "..." },
+          { "title": "...", "points": [], "detailed_content": "...", "image_suggestion": "..." }
         ]
       }
-
-      ⚠️ No markdown, no explanations, no extra text — only raw JSON.
     `;
 
-    const rawOutput = await callOpenRouter(masterPrompt);
+    // --- AI Call with Streaming ---
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            model: 'moonshotai/kimi-k2:free', 
+            messages: [{ role: 'user', content: masterPrompt }],
+            stream: true, // Enable streaming
+        }),
+    });
     
-    const cleaned = rawOutput
-      .replace(/^```json\s*|```$/g, '')
-      .trim();
-
-    let parsed;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch (parseError) {
-      console.error("Failed to parse JSON from AI:", cleaned);
-      throw new Error("AI returned invalid JSON. Please try again.");
+    if (!response.ok) {
+        throw new Error(`OpenRouter API error: ${response.statusText}`);
     }
 
-    const { slides: generatedSlides } = parsed;
+    const stream = OpenAIStream(response, {
+      async onCompletion(completion) {
+        // This block runs after the entire stream is finished
+        try {
+            // Create the presentation entry in the database
+            const { data: presentation, error: presError } = await supabase
+                .from('presentations')
+                .insert({ user_id: user.id, title: topic.substring(0, 70) })
+                .select()
+                .single();
 
-    const { data: presentation, error: presError } = await supabase
-      .from('presentations')
-      .insert({ user_id: userId, title: topic.substring(0, 70) + '...' })
-      .select()
-      .single();
+            if (presError) throw presError;
 
-    if (presError) throw presError;
+            const jsonObjects = findJsonObjects(completion);
+            const parsed = JSON.parse(jsonObjects[0]);
+            const generatedSlides = parsed.slides;
 
-    const slidesToInsert = generatedSlides.map((slide, idx) => ({
-      presentation_id: presentation.id,
-      slide_number: idx + 1,
-      order: idx + 1,
-      title: slide.title,
-      points: slide.points,
-      notes: `${slide.detailed_content}\n\n---\nImage Suggestion: ${slide.image_suggestion}`,
-    }));
+            const slidesToInsert = generatedSlides.map((slide, idx) => ({
+                presentation_id: presentation.id,
+                slide_number: idx + 1,
+                order: idx + 1,
+                title: slide.title,
+                points: slide.points,
+                notes: slide.detailed_content, // Schema Change
+                image_suggestion: slide.image_suggestion, // Schema Change
+            }));
 
-    const { data: insertedSlides, error: slideError } = await supabase
-      .from('slides')
-      .insert(slidesToInsert)
-      .select();
+            const { error: slideError } = await supabase
+                .from('slides')
+                .insert(slidesToInsert);
 
-    if (slideError) throw slideError;
+            if (slideError) throw slideError;
+            
+            // Send a final "complete" message over the WebSocket channel
+            await channel.send({
+                type: 'broadcast',
+                event: 'complete',
+                payload: { presentationId: presentation.id },
+            });
+            console.log("Broadcasting generation complete.");
 
-    return NextResponse.json({ slides: insertedSlides });
+        } catch (dbError) {
+            console.error("Error during onCompletion DB operations:", dbError);
+            await channel.send({
+                type: 'broadcast',
+                event: 'error',
+                payload: { message: 'Failed to save the presentation.' },
+            });
+        }
+      },
+    });
+
+    return new StreamingTextResponse(stream);
 
   } catch (error) {
     console.error('API Route Error:', error);
+     await channel.send({
+        type: 'broadcast',
+        event: 'error',
+        payload: { message: error.message || 'An internal error occurred.' },
+    });
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
     );
   }
-}
-
-// --- OPENROUTER CALLER ---
-async function callOpenRouter(prompt) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 70_000); // 70s timeout
-
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        // THE FIX: Switched to the model you requested.
-        model: 'moonshotai/kimi-k2:free', 
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 4096,
-        top_p: 0.9,
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenRouter ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
-    return data.choices[0].message.content.trim();
-  } catch (err) {
-    clearTimeout(timeoutId);
-    if (err.name === 'AbortError') {
-      throw new Error('The AI model timed out. Please try again with a simpler topic or fewer slides.');
-    }
-    throw err;
-  }
-}
-
-// ✅ CORS
-export async function OPTIONS() {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
 }
