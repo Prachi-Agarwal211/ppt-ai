@@ -4,20 +4,25 @@ import { NextResponse } from 'next/server';
 import { Buffer } from 'buffer';
 import { createClient } from '@supabase/supabase-js';
 
-// Configuration for the API route
+// --- Environment Variable Validation ---
+// This check is critical to prevent the server from starting in a broken state
+// and provides clear errors if configuration is missing.
+const requiredEnvVars = ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'OPENROUTER_API_KEY'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120; // Increased timeout for long AI tasks like presentation generation
+export const maxDuration = 120; // Increased timeout for long AI tasks
 
 // Initialize the Supabase admin client for secure, server-side operations
-const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+// It will be null if keys are missing, which is handled in the POST function.
+const supabaseAdmin = missingEnvVars.length === 0
+    ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    : null;
 
 // --- WORKER FUNCTIONS (The "Sub-AIs") ---
 
 /**
  * WORKER: Generates a brand new presentation from a topic.
- * @param {object} context - Contains topic and slideCount.
- * @param {object} user - The authenticated Supabase user.
- * @returns {object} An object containing the new presentation's ID.
  */
 async function handleGeneratePresentation(context, user) {
     const { topic, slideCount } = context;
@@ -37,7 +42,7 @@ async function handleGeneratePresentation(context, user) {
       RULES:
       - Every slide MUST have one "title" element and one "image_suggestion" element.
       - Position elements logically (e.g., title at top, content below).
-      - Do not include markdown wrappers or any explanations.
+      - Do not include markdown wrappers like \`\`\`json or any explanations.
     `;
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -46,12 +51,20 @@ async function handleGeneratePresentation(context, user) {
         body: JSON.stringify({ model: 'moonshotai/kimi-k2:free', messages: [{ role: 'user', content: masterPrompt }] }),
     });
 
-    if (!response.ok) throw new Error("AI failed to generate presentation content.");
-    
+    if (!response.ok) throw new Error(`AI API call failed with status: ${response.status}`);
+
     const aiResponse = await response.json();
-    const jsonString = aiResponse.choices[0].message.content.trim().match(/{\s*"slides"\s*:\s*\[[\s\S]*?\]\s*}/)[0];
-    const parsed = JSON.parse(jsonString);
+    const content = aiResponse.choices[0].message.content;
     
+    // Robustly find the JSON object within the AI's response string.
+    const startIndex = content.indexOf('{');
+    const endIndex = content.lastIndexOf('}') + 1;
+    if (startIndex === -1 || endIndex === 0) {
+        throw new Error("No valid JSON object found in the AI response.");
+    }
+    const jsonString = content.slice(startIndex, endIndex);
+    const parsed = JSON.parse(jsonString);
+
     const { data: presentation, error: presError } = await supabaseAdmin.from('presentations').insert({ user_id: user.id, title: topic.substring(0, 70) }).select().single();
     if (presError) throw presError;
 
@@ -68,15 +81,13 @@ async function handleGeneratePresentation(context, user) {
 }
 
 /**
- * WORKER: Generates a diagram SVG using Kroki for maximum compatibility and quality.
- * @param {object} context - Contains slideContext (title, points).
- * @returns {object} An object containing the diagram SVG and syntax used.
+ * WORKER: Generates a diagram SVG using Kroki.
  */
 async function generateDiagram(context) {
     const { slideContext } = context;
     if (!slideContext) throw new Error("Missing slide context for diagram generation.");
 
-    const codeGenPrompt = `You are a data visualization expert. Based on the slide content, choose the BEST syntax (mermaid, plantuml, d2, graphviz) to create a clear and professional diagram. Return ONLY a JSON object with "syntax" and "code" keys. Content: ${JSON.stringify(slideContext)}`;
+    const codeGenPrompt = `You are a data visualization expert. Based on the slide content, choose the BEST syntax (mermaid, plantuml, d2, graphviz) to create a clear diagram. Return ONLY a JSON object with "syntax" and "code" keys. Content: ${JSON.stringify(slideContext)}`;
     const codeGenResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
@@ -94,8 +105,6 @@ async function generateDiagram(context) {
 
 /**
  * WORKER: Generates an image URL for the current slide.
- * @param {object} context - Contains imageSuggestion and slideId.
- * @returns {object} An object containing the generated image URL.
  */
 async function generateImage(context) {
     const { imageSuggestion, slideId } = context;
@@ -119,14 +128,12 @@ async function generateImage(context) {
 
 /**
  * WORKER: Generates a new theme for the entire presentation.
- * @param {object} context - Contains presentationId and a style hint from the user command.
- * @returns {object} An object containing the new theme data.
  */
 async function generateTheme(context) {
     const { presentationId, command } = context;
     if (!presentationId) throw new Error("Missing presentation ID for theme generation.");
 
-    const themeGenPrompt = `You are a UI/UX designer. Create a theme for a presentation. Style Hint: "${command}". Output ONLY a raw JSON object with keys: "bg_css", "primary_color", "secondary_color", "accent_color".`;
+    const themeGenPrompt = `You are a UI/UX designer. Create a theme for a presentation. Style Hint: "${command}". Output ONLY a raw JSON object with keys: "bg_css", "primary_color", "secondary_color", "accent_color". Example values are CSS gradients for bg_css and hex codes for colors.`;
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
@@ -148,16 +155,30 @@ async function generateTheme(context) {
 
 // --- "SUPER AI" API ROUTE (The Command Center) ---
 export async function POST(request) {
+    // Immediately fail if the server environment is not configured correctly.
+    if (!supabaseAdmin || missingEnvVars.length > 0) {
+        const errorMessage = `Server configuration error: The following environment variables are missing: ${missingEnvVars.join(', ')}`;
+        return NextResponse.json({ error: errorMessage }, { status: 500 });
+    }
+
     const { task, context } = await request.json();
     const cookieStore = cookies();
-    const { data: { user } } = await createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { cookies: { get: (name) => cookieStore.get(name)?.value } }).auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    // The modern, correct way to pass cookies to the Supabase server client.
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        { cookies: () => cookieStore }
+    );
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     try {
         let finalTask = task;
-        let finalContext = context;
-
-        // If the task comes from chat, we use the AI brain to determine the real task.
+        // If the task comes from chat, use the AI brain to determine the real task.
         if (task === 'interpret_chat') {
             const interpretationPrompt = `You are an AI task orchestrator. Analyze the user's command and context, then return a JSON object with a "task" key. The task must be one of: "generate_diagram", "generate_theme", "generate_image", "generate_presentation", or "clarify". Command: "${context.command}"`;
             const brainResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -174,16 +195,16 @@ export async function POST(request) {
         let result;
         switch (finalTask) {
             case 'generate_presentation':
-                result = await handleGeneratePresentation(finalContext, user);
+                result = await handleGeneratePresentation(context, user);
                 break;
             case 'generate_diagram':
-                result = await generateDiagram(finalContext);
+                result = await generateDiagram(context);
                 break;
             case 'generate_theme':
-                result = await generateTheme(finalContext);
+                result = await generateTheme(context);
                 break;
             case 'generate_image':
-                result = await generateImage(finalContext);
+                result = await generateImage(context);
                 break;
             default:
                 return NextResponse.json({ type: 'clarification', message: "I'm not sure how to handle that. Could you be more specific?" });
@@ -193,6 +214,7 @@ export async function POST(request) {
 
     } catch (error) {
         console.error('AI Command Error:', error.message);
+        // Ensure that even in case of an error, a valid JSON response is sent.
         return NextResponse.json({ error: error.message || 'An internal server error has occurred.' }, { status: 500 });
     }
 }

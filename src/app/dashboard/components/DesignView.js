@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { usePresentationStore, getElement } from '../../../utils/store';
+import { usePresentationStore, getElement } from '@/utils/store';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { FiMove } from 'react-icons/fi';
 import { Rnd } from 'react-rnd';
@@ -33,7 +33,7 @@ const ElementEditor = ({ element, slideId, containerSize }) => {
     const renderContent = () => {
         switch (element.type) {
             case 'title':
-                return <h2 className="text-4xl font-bold text-white w-full h-full p-2 overflow-hidden flex items-center justify-center">{element.content}</h2>;
+                return <h2 className="text-4xl font-bold text-white w-full h-full p-2 overflow-hidden flex items-center justify-center text-center">{element.content}</h2>;
             case 'content':
                 return <div className="text-xl text-gray-300 w-full h-full p-4 overflow-auto text-left">{Array.isArray(element.content) && element.content.map((point, i) => <p key={i}>• {point}</p>)}</div>;
             case 'diagram':

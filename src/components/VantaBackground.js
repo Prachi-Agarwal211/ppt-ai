@@ -3,22 +3,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
-// This component contains the Vanta.js logic.
-// It's designed to be lazy-loaded to improve initial page load performance.
 const VantaBackground = () => {
   const vantaRef = useRef(null);
   const [vantaEffect, setVantaEffect] = useState(null);
 
+  const colorPalettes = [
+    { highlight: 0xfadadd, midtone: 0xebd8e6, lowlight: 0xffe1c6 },
+    { highlight: 0xebd8e6, midtone: 0xffe1c6, lowlight: 0xfadadd },
+    { highlight: 0xffe1c6, midtone: 0xfadadd, lowlight: 0xebd8e6 },
+  ];
+
   useEffect(() => {
     let effect;
     
-    // Dynamically load the Vanta.js FOG script
     const loadVantaScript = () => new Promise((resolve, reject) => {
-        // If the script is already loaded, resolve immediately.
-        if (window.VANTA && window.VANTA.FOG) {
-            resolve();
-            return;
-        }
+        if (window.VANTA && window.VANTA.FOG) return resolve();
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.fog.min.js';
         script.async = true;
@@ -31,7 +30,6 @@ const VantaBackground = () => {
         try {
             await loadVantaScript();
             if (vantaRef.current && !vantaEffect) {
-                // Initialize the Vanta.js FOG effect with theme-consistent colors
                 effect = window.VANTA.FOG({
                     el: vantaRef.current,
                     THREE: THREE,
@@ -40,10 +38,9 @@ const VantaBackground = () => {
                     gyroControls: false,
                     minHeight: 200.0,
                     minWidth: 200.0,
-                    // These colors are taken from tailwind.config.js for a cohesive look and feel.
-                    highlightColor: 0xfadadd, // pinkBlush
-                    midtoneColor: 0xebd8e6,   // mauveLight
-                    lowlightColor: 0xffe1c6,  // peachSoft
+                    highlightColor: colorPalettes[0].highlight,
+                    midtoneColor: colorPalettes[0].midtone,
+                    lowlightColor: colorPalettes[0].lowlight,
                     baseColor: 0x0,
                     blurFactor: 0.50,
                     speed: 1.30,
@@ -58,11 +55,22 @@ const VantaBackground = () => {
 
     initializeVanta();
 
-    // Cleanup function to destroy the effect when the component unmounts
     return () => {
-      if (effect) effect.destroy();
+      if (vantaEffect) vantaEffect.destroy();
     };
-  }, [vantaEffect]); // Dependency array ensures this runs only once on mount
+  }, []); 
+
+  useEffect(() => {
+    if (!vantaEffect) return;
+
+    let paletteIndex = 0;
+    const colorInterval = setInterval(() => {
+      paletteIndex = (paletteIndex + 1) % colorPalettes.length;
+      vantaEffect.setOptions(colorPalettes[paletteIndex]);
+    }, 10000);
+
+    return () => clearInterval(colorInterval);
+  }, [vantaEffect]);
 
   return <div ref={vantaRef} className="fixed top-0 left-0 w-full h-full z-[-1] pointer-events-none" />;
 };

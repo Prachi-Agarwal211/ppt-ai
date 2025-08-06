@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiLink, FiClipboard, FiCheck, FiLoader } from 'react-icons/fi';
-import { usePresentationStore } from '../../../utils/store';
-import { createClient } from '../../../utils/supabase/client';
+import { usePresentationStore } from '@/utils/store';
+import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
 
 export const ShareModal = ({ isOpen, onClose }) => {

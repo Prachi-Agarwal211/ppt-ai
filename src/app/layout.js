@@ -17,10 +17,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Lazy load the heavy VantaBackground component.
-// It will not be included in the initial JS bundle, making the login page load instantly.
+// Lazy load the VantaBackground. It will not be in the initial JS bundle.
 const VantaBackground = dynamic(() => import('../components/VantaBackground'), {
-  ssr: false, // This component will only render on the client
+  ssr: false, // This component only renders on the client
   loading: () => <div className="fixed top-0 left-0 w-full h-full z-[-1] bg-black" />
 });
 
@@ -30,12 +29,16 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/* VantaBackground is placed here as a persistent, animated background layer */}
         <Suspense>
             <VantaBackground />
         </Suspense>
+        
+        {/* Page content is rendered on top of the background */}
         <div className="relative z-[1] min-h-screen">
           {children}
         </div>
+
         <Toaster 
           position="bottom-center"
           toastOptions={{

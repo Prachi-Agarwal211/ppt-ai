@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { usePresentationStore, getElement } from '../../../utils/store';
+import { usePresentationStore, getElement } from '@/utils/store';
 import { Toolbox } from './Toolbox';
 import { FiLayout, FiEdit2 } from 'react-icons/fi';
 import { useEffect, useState, useRef, useMemo } from 'react';
@@ -11,22 +11,20 @@ const useDebouncedSave = (slide) => {
     const timeoutRef = useRef(null);
 
     useEffect(() => {
-        // Do not save if the slide is new or not ready
         if (!slide || (typeof slide.id === 'string' && slide.id.startsWith('new-'))) return;
 
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
         timeoutRef.current = setTimeout(async () => {
             setIsSaving(true);
-            // We only save the elements and notes, as these are the only fields editable here
             await updateSlideInDB(slide.id, { elements: slide.elements, notes: slide.notes });
             setIsSaving(false);
-        }, 1500); // 1.5-second delay
+        }, 1500);
 
         return () => {
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
         };
-    }, [slide?.elements, slide?.notes, slide?.id, updateSlideInDB]); // Re-run only when these change
+    }, [slide?.elements, slide?.notes, slide?.id, updateSlideInDB]);
 
     return isSaving;
 };
@@ -43,7 +41,6 @@ export const OutlineView = ({ onProceed }) => {
     const titleElement = useMemo(() => getElement(slide, 'title'), [slide]);
     const contentElement = useMemo(() => getElement(slide, 'content'), [slide]);
     
-    // Show a helpful message if no slide is selected or if the slide data is malformed
     if (!slide || !titleElement || !contentElement) {
         return (
             <div className="flex h-full w-full flex-col items-center justify-center text-gray-500">

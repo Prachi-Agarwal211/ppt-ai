@@ -1,5 +1,5 @@
 import { FiCpu, FiGitMerge, FiLayers, FiSettings, FiImage, FiVideo, FiLoader } from 'react-icons/fi';
-import { usePresentationStore } from '../../../utils/store';
+import { usePresentationStore, getElement } from '@/utils/store';
 
 // A reusable button component to keep the code clean and consistent.
 const AiButton = ({ command, title, icon: Icon, disabled, tooltip }) => {

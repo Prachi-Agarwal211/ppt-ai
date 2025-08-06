@@ -1,24 +1,42 @@
-import { useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { FiArrowLeft, FiArrowRight, FiX } from 'react-icons/fi';
-import { usePresentationStore, getElement } from '../../../utils/store';
+'use client';
+import React from 'react';
+import { usePresentationStore, getElement } from '@/utils/store';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Navigation, Pagination, A11y, Mousewheel } from 'swiper/modules';
 
-const FullscreenElementRenderer = ({ element, theme }) => {
-    if (!element) return null;
-    
-    const titleStyle = theme.primary_color ? { color: theme.primary_color } : {};
+// These CSS imports are required here for Swiper to function correctly.
+import 'swiper/css';
+import 'swiper/css/navigation';
+import 'swiper/css/pagination';
 
-    const renderContent = () => {
-        switch(element.type) {
+// This component renders a single, read-only slide for the presentation mode.
+const PresentationSlide = ({ slide }) => {
+    const theme = usePresentationStore(state => state.theme);
+    const containerStyle = theme.bg_css ? { background: theme.bg_css } : {};
+    const imageSuggestionElement = getElement(slide, 'image_suggestion');
+
+    const renderElement = (element) => {
+        if (!element) return null;
+        
+        const style = {
+            position: 'absolute',
+            left: `${element.position.x}%`,
+            top: `${element.position.y}%`,
+            width: `${element.size.width}%`,
+            height: `${element.size.height}%`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem'
+        };
+
+        switch (element.type) {
             case 'title':
-                return <h1 className="text-6xl font-bold text-white mb-8" style={titleStyle}>{element.content}</h1>;
+                return <h2 className="text-5xl font-bold text-white text-center drop-shadow-lg" style={style}>{element.content}</h2>;
             case 'content':
-                const points = Array.isArray(element.content) ? element.content : [];
-                return (
-                     <ul className="space-y-4 text-3xl text-gray-300">
-                      {points.map((point, i) => <motion.li key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.15 }}>{point}</motion.li>)}
-                    </ul>
-                );
+                 return <div className="text-2xl text-gray-200 text-left drop-shadow-md" style={style}>{Array.isArray(element.content) && element.content.map((point, i) => <p key={i}>• {point}</p>)}</div>;
+            case 'diagram':
+                return <div className="w-full h-full bg-white rounded-md" style={style} dangerouslySetInnerHTML={{ __html: element.content }} />;
             default:
                 return null;
         }
@@ -26,88 +44,59 @@ const FullscreenElementRenderer = ({ element, theme }) => {
     
     return (
         <div 
-            style={{
-                position: 'absolute',
-                left: `${element.position.x}%`,
-                top: `${element.position.y}%`,
-                width: `${element.size.width}%`,
-                height: `${element.size.height}%`,
-            }}
-            className="flex flex-col justify-center text-center"
+            style={containerStyle}
+            className="w-full h-full bg-black/20 rounded-xl border border-white/10 shadow-lg transition-all duration-500 relative overflow-hidden"
         >
-            {renderContent()}
+            {slide.image_url && <img src={slide.image_url} alt={imageSuggestionElement?.content || ''} className="absolute w-full h-full top-0 left-0 object-cover rounded-xl -z-10" />}
+            {slide.elements.map(el => {
+                // We don't render the image suggestion itself, only the other elements.
+                if(el.type !== 'image_suggestion') {
+                    return <div key={el.id}>{renderElement(el)}</div>
+                }
+                return null;
+            })}
         </div>
     );
-}
+};
 
-export const PresentationView = ({ isVisible, onClose }) => {
-    const { slides, currentSlideIndex, nextSlide, prevSlide, theme } = usePresentationStore(state => ({
-        slides: state.slides,
-        currentSlideIndex: state.currentSlideIndex,
-        nextSlide: state.nextSlide,
-        prevSlide: state.prevSlide,
-        theme: state.theme,
-    }));
-    const activeSlide = slides[currentSlideIndex];
-    
-    useEffect(() => {
-      const handleKeyDown = (e) => {
-        if (!isVisible) return;
-        if (e.key === 'ArrowRight') nextSlide();
-        if (e.key === 'ArrowLeft') prevSlide();
-        if (e.key === 'Escape') onClose();
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isVisible, nextSlide, prevSlide, onClose]);
-  
-    const hasImage = !!activeSlide?.image_url;
+export const PresentationView = () => {
+  // Correctly imports and uses the `usePresentationStore` hook.
+  const { slides, setActiveSlideId } = usePresentationStore(state => ({ slides: state.slides, setActiveSlideId: state.setActiveSlideId }));
 
-    const containerStyle = theme.bg_css ? { background: theme.bg_css } : { background: '#000' };
-
+  if (!Array.isArray(slides) || slides.length === 0) {
     return (
-      <AnimatePresence>
-        {isVisible && activeSlide && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }} 
-            style={containerStyle}
-            className="fixed inset-0 z-50 flex flex-col transition-all duration-500"
-          >
-            <div className="w-full h-full p-16 relative">
-              <AnimatePresence mode="wait">
-                <motion.div 
-                  key={activeSlide.id} 
-                  initial={{ opacity: 0, x: 50 }} 
-                  animate={{ opacity: 1, x: 0 }} 
-                  exit={{ opacity: 0, x: -50 }} 
-                  transition={{ duration: 0.3 }}
-                  className="w-full h-full"
-                >
-                    {hasImage && (
-                        <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: 0.2 }}
-                        className="absolute top-0 left-0 w-full h-full -z-10"
-                        >
-                            <img src={activeSlide.image_url} alt={getElement(activeSlide, 'image_suggestion')?.content || 'AI generated image'} className="w-full h-full object-cover" />
-                        </motion.div>
-                    )}
-
-                    {activeSlide.elements.map(el => (
-                        <FullscreenElementRenderer key={el.id} element={el} theme={theme} />
-                    ))}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-            <button onClick={prevSlide} className="absolute top-1/2 left-6 -translate-y-1/2 text-gray-400 hover:text-white disabled:opacity-30" disabled={currentSlideIndex === 0}><FiArrowLeft size={32} /></button>
-            <button onClick={nextSlide} className="absolute top-1/2 right-6 -translate-y-1/2 text-gray-400 hover:text-white disabled:opacity-30" disabled={currentSlideIndex === slides.length - 1}><FiArrowRight size={32} /></button>
-            <button onClick={onClose} className="absolute top-6 right-6 text-gray-400 hover:text-white"><FiX size={32} /></button>
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-gray-400 text-sm">{currentSlideIndex + 1} / {slides.length}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className="flex items-center justify-center w-full h-full bg-black text-gray-400">
+        This presentation has no slides.
+      </div>
     );
+  }
+
+  // Updates the global state with the currently active slide for context.
+  const handleSlideChange = (swiper) => {
+    const activeSlide = slides[swiper.activeIndex];
+    if (activeSlide) {
+        setActiveSlideId(activeSlide.id);
+    }
+  };
+
+  return (
+    <div className="w-full h-full bg-black">
+      <Swiper
+        modules={[Navigation, Pagination, A11y, Mousewheel]}
+        spaceBetween={0}
+        slidesPerView={1}
+        navigation
+        pagination={{ clickable: true }}
+        mousewheel
+        className="h-full"
+        onSlideChange={handleSlideChange}
+      >
+        {slides.map((slide) => (
+          <SwiperSlide key={slide.id} className="flex items-center justify-center p-4 sm:p-8">
+            <PresentationSlide slide={slide} />
+          </SwiperSlide>
+        ))}
+      </Swiper>
+    </div>
+  );
 };

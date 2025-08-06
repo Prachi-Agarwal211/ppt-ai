@@ -1,66 +1,75 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
-import { FiLoader, FiSend } from 'react-icons/fi';
-import { usePresentationStore } from '../../../utils/store';
+import { useState, useEffect, useRef } from 'react';
+import { usePresentationStore } from '@/utils/store';
+import { FiArrowUp, FiLoader } from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export const AIChatSidebar = () => {
-    const [input, setInput] = useState('');
-    const messagesEndRef = useRef(null);
-    const { messages, sendCommand, addMessage, isAssistantProcessing } = usePresentationStore();
+  const [input, setInput] = useState('');
+  const { sendCommand, addMessage, messages, isAssistantProcessing } = usePresentationStore();
+  const messagesEndRef = useRef(null);
+  
+  // Automatically scroll down to the newest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, isAssistantProcessing]);
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!input.trim() || isAssistantProcessing) return;
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!input.trim() || isAssistantProcessing) return;
-        
-        // The `command` object sent from the chat always has the task 'interpret_chat'.
-        // The backend AI will then decide the *actual* task (e.g., 'generate_diagram').
-        const command = { task: 'interpret_chat', command: input };
-        addMessage({ role: 'user', content: input });
-        setInput('');
-        
-        await sendCommand(command);
-    };
+    const userMessage = { role: 'user', content: input };
+    addMessage(userMessage);
+    const commandToRun = input;
+    setInput('');
 
-    return (
-        <div className="h-full flex flex-col">
-            <h3 className="text-xl font-semibold mb-4 text-gray-200 flex-shrink-0">AI Assistant</h3>
-            <div className="flex-grow bg-white/5 rounded-lg p-3 overflow-y-auto space-y-4">
-                {messages.map((msg, i) => (
-                    <div key={i} className={`flex items-start gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                       <div className={`flex flex-col w-full max-w-[320px] leading-1.5 p-3 border-gray-600 ${msg.role === 'user' ? 'rounded-s-xl rounded-ee-xl bg-blue-500/30' : 'rounded-e-xl rounded-es-xl bg-gray-600/40'}`}>
-                           <p className="text-sm font-normal text-white">{msg.content}</p>
-                       </div>
+    // Route all AI tasks through the central command handler in the store
+    await sendCommand({
+        task: 'interpret_chat',
+        command: commandToRun
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-grow overflow-y-auto pr-2 -mr-2 space-y-4">
+        <AnimatePresence>
+            {messages.map((msg, index) => (
+                <motion.div
+                    key={index}
+                    layout
+                    initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                    <div className={`max-w-xs lg:max-w-sm px-4 py-2 rounded-2xl ${msg.role === 'user' ? 'bg-peachSoft/80 text-black' : 'bg-white/10 text-gray-200'}`}>
+                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                     </div>
-                ))}
-                {isAssistantProcessing && (
-                     <div className="flex items-start gap-2.5 justify-start">
-                         <div className="flex flex-col w-full max-w-[320px] leading-1.5 p-3 border-gray-600 rounded-e-xl rounded-es-xl bg-gray-600/40">
-                             <div className="flex items-center space-x-2">
-                                 <FiLoader className="animate-spin text-white"/>
-                                 <span className="text-sm font-normal text-gray-300">Thinking...</span>
-                             </div>
-                         </div>
-                     </div>
-                )}
-                <div ref={messagesEndRef} />
-            </div>
-            <form onSubmit={handleSubmit} className="mt-4 flex-shrink-0 flex items-center gap-2">
-                <input 
-                    type="text" 
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    placeholder="Ask for a diagram, theme, etc." 
-                    disabled={isAssistantProcessing}
-                    className="w-full bg-black/30 p-3 rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-peachSoft disabled:opacity-50" 
-                />
-                <button type="submit" disabled={isAssistantProcessing || !input.trim()} className="primary-button p-3 disabled:opacity-50">
-                    <FiSend size={20} />
-                </button>
-            </form>
-        </div>
-    );
-}
+                </motion.div>
+            ))}
+        </AnimatePresence>
+        <div ref={messagesEndRef} />
+      </div>
+      <div className="flex-shrink-0 pt-4 mt-2 border-t border-white/10">
+        <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="e.g., Change theme to cyberpunk"
+            className="flex-1 p-2 bg-white/5 rounded-lg focus:outline-none focus:ring-1 focus:ring-peachSoft text-sm"
+            disabled={isAssistantProcessing}
+          />
+          <button
+            type="submit"
+            className="p-2 bg-peachSoft text-black rounded-lg hover:brightness-110 disabled:bg-gray-500 disabled:opacity-70 transition-all"
+            disabled={!input.trim() || isAssistantProcessing}
+          >
+            {isAssistantProcessing ? <FiLoader className="animate-spin" size={20} /> : <FiArrowUp size={20} />}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};

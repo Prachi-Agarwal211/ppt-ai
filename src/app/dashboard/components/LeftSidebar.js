@@ -1,6 +1,6 @@
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { FiPlus, FiTrash2, FiLoader } from 'react-icons/fi';
-import { usePresentationStore, getElement } from '../../../utils/store';
+import { usePresentationStore, getElement } from '@/utils/store';
 import { useMemo } from 'react';
 
 // A memoized component to prevent re-rendering every slide preview on every state change
