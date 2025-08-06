@@ -29,6 +29,7 @@ const VantaBackground = () => {
         try {
             await loadVantaScript();
             if (vantaRef.current && !vantaEffect) {
+                // FIX: Restore the color-changing fog using the theme's colors
                 effect = window.VANTA.FOG({
                     el: vantaRef.current,
                     THREE: THREE,
@@ -37,13 +38,14 @@ const VantaBackground = () => {
                     gyroControls: false,
                     minHeight: 200.0,
                     minWidth: 200.0,
-                    highlightColor: 0x9c88ff,
-                    midtoneColor: 0x3a3a5e,
-                    lowlightColor: 0x1a1a2e,
+                    // Use theme colors from tailwind.config.js for a cohesive look
+                    highlightColor: 0xfadadd, // pinkBlush
+                    midtoneColor: 0xebd8e6,   // mauveLight
+                    lowlightColor: 0xffe1c6,  // peachSoft
                     baseColor: 0x0,
-                    blurFactor: 0.55,
-                    speed: 1.2,
-                    zoom: 0.8,
+                    blurFactor: 0.50,
+                    speed: 1.30,
+                    zoom: 0.80,
                 });
                 setVantaEffect(effect);
             }
@@ -57,7 +59,7 @@ const VantaBackground = () => {
     return () => {
       if (effect) effect.destroy();
     };
-  }, [vantaEffect]);
+  }, [vantaEffect]); // Dependency array is correct
 
   return <div ref={vantaRef} className="fixed top-0 left-0 w-full h-full z-[-1] pointer-events-none" />;
 };

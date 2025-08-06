@@ -1,7 +1,10 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { OpenAIStream, StreamingTextResponse } from 'ai';
+//
+// FIX: THIS IS THE CORRECTED IMPORT. 'OpenAIStream' HAS BEEN REMOVED.
+//
+import { StreamingTextResponse } from 'ai';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -66,63 +69,72 @@ export async function POST(request) {
         throw new Error(`OpenRouter API error: ${response.statusText}`);
     }
 
-    const stream = OpenAIStream(response, {
-      onStart: async () => {
-        // Broadcast a start event to give immediate feedback to the user
-        await channel.send({ type: 'broadcast', event: 'start' });
-      },
-      onCompletion: async (completion) => {
-        try {
-            const { data: presentation, error: presError } = await supabase
-                .from('presentations')
-                .insert({ user_id: user.id, title: topic.substring(0, 70) })
-                .select()
-                .single();
+    // This ReadableStream replaces the old OpenAIStream logic.
+    // It correctly handles the response and streams it to the client.
+    const stream = new ReadableStream({
+        async start(controller) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullCompletion = '';
 
-            if (presError) throw presError;
+            await channel.send({ type: 'broadcast', event: 'start' });
 
-            const jsonString = findJsonObject(completion);
-            if (!jsonString) throw new Error("No valid JSON object found in AI response.");
-            
-            const parsed = JSON.parse(jsonString);
-            const generatedSlides = parsed.slides;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                controller.enqueue(value);
+                fullCompletion += chunk;
+            }
 
-            const slidesToInsert = generatedSlides.map((slide, idx) => ({
-                presentation_id: presentation.id,
-                slide_number: idx + 1,
-                order: idx + 1,
-                title: slide.title,
-                points: slide.points,
-                notes: slide.detailed_content,
-                image_suggestion: slide.image_suggestion,
-            }));
+            try {
+                const { data: presentation, error: presError } = await supabase
+                    .from('presentations')
+                    .insert({ user_id: user.id, title: topic.substring(0, 70) })
+                    .select()
+                    .single();
 
-            const { error: slideError } = await supabase.from('slides').insert(slidesToInsert);
-            if (slideError) throw slideError;
-            
-            await channel.send({
-                type: 'broadcast',
-                event: 'complete',
-                payload: { presentationId: presentation.id },
-            });
+                if (presError) throw presError;
 
-        } catch (dbError) {
-            console.error("Error during onCompletion DB operations:", dbError);
-            await channel.send({
-                type: 'broadcast',
-                event: 'error',
-                payload: { message: 'Failed to save the generated presentation.' },
-            });
+                const jsonString = findJsonObject(fullCompletion);
+                if (!jsonString) throw new Error("No valid JSON object found in AI response.");
+                
+                const parsed = JSON.parse(jsonString);
+                const generatedSlides = parsed.slides;
+
+                const slidesToInsert = generatedSlides.map((slide, idx) => ({
+                    presentation_id: presentation.id,
+                    slide_number: idx + 1,
+                    order: idx + 1,
+                    title: slide.title,
+                    points: slide.points,
+                    notes: slide.detailed_content,
+                    image_suggestion: slide.image_suggestion,
+                }));
+
+                const { error: slideError } = await supabase.from('slides').insert(slidesToInsert);
+                if (slideError) throw slideError;
+                
+                await channel.send({
+                    type: 'broadcast',
+                    event: 'complete',
+                    payload: { presentationId: presentation.id },
+                });
+
+            } catch (dbError) {
+                console.error("Error during stream completion DB operations:", dbError);
+                await channel.send({
+                    type: 'broadcast',
+                    event: 'error',
+                    payload: { message: `Failed to save the generated presentation. ${dbError.message}` },
+                });
+            } finally {
+                await supabase.removeChannel(channel);
+                controller.close();
+            }
         }
-      },
-       onFinal: async () => {
-         // Disconnect the channel when the stream is completely finished
-         await supabase.removeChannel(channel);
-       }
     });
 
-    // We return the stream immediately for the client to process for live text display.
-    // The actual database saving happens reliably in onCompletion.
     return new StreamingTextResponse(stream);
 
   } catch (error) {
@@ -132,6 +144,7 @@ export async function POST(request) {
         event: 'error',
         payload: { message: error.message || 'An internal error occurred.' },
     });
+    await supabase.removeChannel(channel);
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }

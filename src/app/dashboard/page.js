@@ -7,31 +7,39 @@ import { FiLoader } from 'react-icons/fi';
 import { createClient } from '../../utils/supabase/client';
 import { usePresentationStore } from '../../utils/store';
 
-// Import Components
+// Import components from their files
 import { LeftSidebar } from './components/LeftSidebar';
+import { IdeaView } from './components/IdeaView';
 import { OutlineView } from './components/OutlineView';
 import { DeckView } from './components/DeckView';
-import { IdeaView } from './components/IdeaView';
 import { HistorySidebar } from './components/HistorySidebar';
 import { AIChatSidebar } from './components/AIChatSidebar';
-import { Header } from './components/Header';
+import { Header } from './components/header'; // Corrected path to lowercase 'h'
+import { ShareModal } from './components/ShareModal';
 
 // Lazy load heavy/modal components that are not visible on initial load
 const PresentationView = dynamic(() => import('./components/PresentationView').then(mod => mod.PresentationView));
-const ShareModal = dynamic(() => import('./components/ShareModal').then(mod => mod.ShareModal));
 
+/**
+ * ====================================================================
+ * Main Dashboard Component
+ * ====================================================================
+ */
 export default function DashboardPage() {
   const supabase = createClient();
   const router = useRouter();
 
   const {
-    slides, isGenerating, generationError, presentationsHistory,
-    historyLoading, startPresentation, fetchHistory, loadPresentation
+    slides, activeSlideId, isGenerating, generationError, presentationsHistory,
+    currentSlideIndex, nextSlide, prevSlide, historyLoading,
+    startPresentation, setActiveSlideId, updateSlide, addSlide, deleteSlide,
+    fetchHistory, loadPresentation
   } = usePresentationStore();
 
-  const [sessionChecked, setSessionChecked] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState('idea');
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -39,8 +47,8 @@ export default function DashboardPage() {
       if (!session) {
         router.replace('/');
       } else {
+        setLoading(false);
         fetchHistory();
-        setSessionChecked(true);
       }
     };
     checkUser();
@@ -53,27 +61,26 @@ export default function DashboardPage() {
 
   const handleStartPresentation = async (config) => {
     const success = await startPresentation(config);
-    if (success) setView('outline');
+    if (success) {
+      setView('outline'); // Switch view immediately
+    }
   };
   
   const handleLoadHistoryItem = async (id) => {
     const success = await loadPresentation(id);
-    if (success) setView('outline');
+    if (success) {
+      setView('outline');
+    }
   };
 
-  if (!sessionChecked) {
-      return (
-        <main className="min-h-screen w-full bg-black flex items-center justify-center">
-            <FiLoader className="text-4xl animate-spin text-white" />
-        </main>
-      );
-  }
+  if (loading) return <main className="min-h-screen w-full bg-black flex items-center justify-center"><FiLoader className="text-4xl animate-spin text-white" /></main>;
 
   return (
     <main className="h-screen w-full text-white flex flex-col font-sans relative overflow-hidden">
       <div className="relative z-10 flex flex-col flex-grow h-full">
         <Header 
-          view={view} setView={setView} 
+          view={view} 
+          setView={setView} 
           onShare={() => setIsShareModalOpen(true)} 
           onPresent={() => setView('presentation')} 
           onLogout={handleLogout}
@@ -81,7 +88,8 @@ export default function DashboardPage() {
         />
         <div className="flex-grow flex overflow-hidden">
           <AnimatePresence>
-            {(isGenerating || slides.length > 0) && (
+            {/* Show sidebar if generating OR if slides exist */}
+            {(isGenerating || (slides.length > 0)) && (view === 'outline' || view === 'deck') && (
               <motion.aside 
                 initial={{ width: 0, opacity: 0, padding: 0 }}
                 animate={{ width: 288, opacity: 1, padding: '1rem' }}
@@ -93,32 +101,43 @@ export default function DashboardPage() {
               </motion.aside>
             )}
           </AnimatePresence>
+
           <main className="flex-grow p-6 flex flex-col overflow-y-auto">
             <AnimatePresence mode="wait">
               {view === 'idea' && (
-                <IdeaView key="idea" onStart={handleStartPresentation} isGenerating={isGenerating} error={generationError} />
+                <IdeaView 
+                  key="idea" 
+                  onStart={handleStartPresentation} 
+                  isGenerating={isGenerating}
+                  error={generationError}
+                />
               )}
               {view === 'outline' && <OutlineView key="outline" onProceed={() => setView('deck')} />}
               {view === 'deck' && <DeckView key="deck" />}
             </AnimatePresence>
           </main>
-          <motion.aside 
-            className="w-88 bg-black/20 border-l border-white/10 flex flex-col overflow-hidden p-4"
-          >
-            {view === 'idea' ? (
-                <HistorySidebar history={presentationsHistory} onLoad={handleLoadHistoryItem} isLoading={historyLoading} />
-            ) : (
-                <AIChatSidebar />
+
+          <AnimatePresence>
+            {isRightSidebarOpen && (
+              <motion.aside 
+                initial={{ width: 0, opacity: 0, padding: 0 }}
+                animate={{ width: 352, opacity: 1, padding: '1rem' }}
+                exit={{ width: 0, opacity: 0, padding: 0 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                className="w-88 bg-black/20 border-l border-white/10 flex flex-col overflow-hidden"
+              >
+                {view === 'idea' && <HistorySidebar history={presentationsHistory} onLoad={handleLoadHistoryItem} isLoading={historyLoading} />}
+                {(view === 'outline' || view === 'deck') && <AIChatSidebar />}
+              </motion.aside>
             )}
-          </motion.aside>
+          </AnimatePresence>
         </div>
       </div>
-      <AnimatePresence>
-        {view === 'presentation' && <PresentationView isVisible={true} onClose={() => setView('deck')} />}
-      </AnimatePresence>
-       <AnimatePresence>
-        {isShareModalOpen && <ShareModal isOpen={true} onClose={() => setIsShareModalOpen(false)} />}
-      </AnimatePresence>
+      <PresentationView 
+        isVisible={view === 'presentation'} 
+        onClose={() => setView('deck')} 
+      />
+      <ShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />
     </main>
   );
 }

@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+'use client';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiCpu, FiType, FiLink, FiUploadCloud, FiLoader } from 'react-icons/fi';
 import mammoth from 'mammoth';
@@ -10,32 +11,39 @@ export const IdeaView = ({ onStart, isGenerating, error }) => {
     const [link, setLink] = useState('');
     const [file, setFile] = useState(null);
     const [slideCount, setSlideCount] = useState(7);
+    const fileInputRef = useRef(null);
   
     const handleSubmit = async (e) => {
       e.preventDefault();
       if (isGenerating) return;
   
-      let content = '';
-      if (inputMode === 'text' && text.trim()) content = text;
-      else if (inputMode === 'link' && link.trim()) content = `Please create a presentation from the content of this URL: ${link}`;
-      else if (inputMode === 'file' && file) {
+      let config = {};
+      if (inputMode === 'text' && text.trim()) {
+        config = { type: 'text', content: text };
+      } else if (inputMode === 'link' && link.trim()) {
+        config = { type: 'link', content: link };
+      } else if (inputMode === 'file' && file) {
         try {
           const arrayBuffer = await file.arrayBuffer();
           const result = await mammoth.extractRawText({ arrayBuffer });
-          content = result.value;
+          config = { type: 'text', content: result.value };
         } catch (err) {
           console.error('Error reading docx file:', err);
+          alert('Could not read the content of the selected file. Please try another one.');
           return;
         }
       }
       
-      if (content) onStart({ content, slideCount });
+      if (Object.keys(config).length > 0) {
+        onStart({ ...config, slideCount });
+      }
     };
   
     return (
       <motion.div key="idea" initial={{opacity: 0, y: 20}} animate={{opacity: 1, y: 0}} exit={{opacity: 0, y: -20}} className="flex h-full flex-col items-center justify-center">
         <AnimatedCharacters text="Let's Create Your Presentation" className="text-4xl font-bold bg-gradient-to-r from-pinkBlush via-peachSoft to-mauveLight bg-clip-text text-transparent mb-4" />
         <p className="text-gray-400 mb-6">Start with a topic, a link, or a document.</p>
+        
         <div className="w-full max-w-2xl bg-black/20 rounded-2xl border border-white/10 p-6">
           <div className="flex gap-2 mb-4 p-1 bg-black/20 rounded-full">
             {[{key: 'text', icon: FiType, label: 'From Text'}, {key: 'link', icon: FiLink, label: 'From Link'}, {key: 'file', icon: FiUploadCloud, label: 'From File'}].map(mode => (
@@ -44,14 +52,42 @@ export const IdeaView = ({ onStart, isGenerating, error }) => {
               </button>
             ))}
           </div>
+  
           <form onSubmit={handleSubmit}>
             <AnimatePresence mode="wait">
-              {inputMode === 'text' && <motion.textarea key="text" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} value={text} onChange={e => setText(e.target.value)} placeholder="e.g., The history of space exploration..." rows="4" className="w-full bg-white/5 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-peachSoft resize-none"></motion.textarea>}
-              {inputMode === 'link' && <motion.input key="link" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://example.com/article" className="w-full bg-white/5 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-peachSoft" />}
-              {inputMode === 'file' && <motion.div key="file" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}}><label htmlFor="file-upload" className="w-full flex flex-col items-center justify-center bg-white/5 rounded-lg p-6 border-2 border-dashed border-white/20 cursor-pointer hover:bg-white/10">{file ? <p>{file.name}</p> : <><FiUploadCloud className="text-3xl mb-2" /><p>Click to upload (.docx)</p></>}</label><input id="file-upload" type="file" className="sr-only" accept=".docx" onChange={e => setFile(e.target.files[0])} /></motion.div>}
+              {inputMode === 'text' && (
+                <motion.textarea key="text" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} value={text} onChange={e => setText(e.target.value)} placeholder="e.g., A presentation on the history of space exploration..." rows="4" className="w-full bg-white/5 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-peachSoft resize-none"></motion.textarea>
+              )}
+              {inputMode === 'link' && (
+                <motion.input key="link" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://example.com/article" className="w-full bg-white/5 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-peachSoft" />
+              )}
+              {inputMode === 'file' && (
+                <motion.div key="file" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}}>
+                  <label htmlFor="file-upload" className="w-full flex flex-col items-center justify-center bg-white/5 rounded-lg p-6 border-2 border-dashed border-white/20 cursor-pointer hover:bg-white/10">
+                    {file ? <p>{file.name}</p> : <><FiUploadCloud className="text-3xl mb-2" /><p>Click to upload a document (.docx)</p></>}
+                  </label>
+                  <input id="file-upload" ref={fileInputRef} type="file" className="sr-only" accept=".docx" onChange={e => setFile(e.target.files[0])} />
+                </motion.div>
+              )}
             </AnimatePresence>
-            <div className="mt-4"><label htmlFor="slide-count" className="block text-sm font-medium text-gray-300 mb-2">Number of Slides</label><input type="number" id="slide-count" value={slideCount} onChange={(e) => setSlideCount(parseInt(e.target.value, 10))} min="3" max="15" className="w-full bg-white/5 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-peachSoft" /></div>
-            <button type="submit" disabled={isGenerating} className="primary-button w-full justify-center mt-4">{isGenerating ? <><FiLoader className="mr-2 animate-spin" /> Generating...</> : <><FiCpu className="mr-2" /> Generate Presentation</>}</button>
+            
+            <div className="mt-4">
+                <label htmlFor="slide-count" className="block text-sm font-medium text-gray-300 mb-2">Number of Slides</label>
+                <input
+                  type="number"
+                  id="slide-count"
+                  name="slide-count"
+                  value={slideCount}
+                  onChange={(e) => setSlideCount(parseInt(e.target.value, 10))}
+                  min="3"
+                  max="15"
+                  className="w-full bg-white/5 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-peachSoft"
+                />
+            </div>
+  
+            <button type="submit" disabled={isGenerating} className="primary-button w-full justify-center mt-4">
+              {isGenerating ? <><FiLoader className="mr-2 animate-spin" /> Generating...</> : <><FiCpu className="mr-2" /> Generate Presentation</>}
+            </button>
             {error && <p className="text-red-400 text-sm text-center mt-2">{error}</p>}
           </form>
         </div>
