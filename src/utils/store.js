@@ -1,54 +1,196 @@
 import { create } from 'zustand';
 import { createClient } from './supabase/client';
 import { v4 as uuidv4 } from 'uuid';
+import toast from 'react-hot-toast';
 
-// This utility function is used for debounced saving in the OutlineView
-const updateSlideInDB = async (slide) => {
-    if (!slide || !slide.id || String(slide.id).startsWith('new-')) return;
+// A shared helper function to find a specific element within a slide's elements array.
+export const getElement = (slide, type) => {
+    if (!slide || !Array.isArray(slide.elements)) return undefined;
+    return slide.elements.find(el => el.type === type);
+};
+
+// A debounced utility to save slide changes to the database.
+const updateSlideInDB = async (slideId, slideData) => {
+    if (!slideId || String(slideId).startsWith('new-')) return;
     const supabase = createClient();
     try {
-        await supabase
-            .from('slides')
-            .update({
-                title: slide.title,
-                points: slide.points,
-                notes: slide.notes,
-                order: slide.order,
-                image_url: slide.image_url // Ensure image_url is part of the update
-            })
-            .eq('id', slide.id);
+        await supabase.from('slides').update(slideData).eq('id', slideId);
     } catch (error) {
         console.error("Error debounced saving slide:", error);
+        toast.error("Auto-save failed.");
     }
 };
 
 export const usePresentationStore = create((set, get) => ({
-    // STATE
+    // --- STATE ---
     slides: [],
-    presentationId: null, // NEW: Keep track of the current presentation's ID
+    presentationId: null,
     activeSlideId: null,
     presentationsHistory: [],
     historyLoading: true,
-    isGenerating: false, 
+    isGenerating: false, // For initial presentation creation
     generationError: null,
     currentSlideIndex: 0,
-    isDiagramGenerating: false, 
-    isImageGenerating: false,
-    isThemeGenerating: false, // NEW: Loading state for theme generation
+    isAssistantProcessing: false, // For all other AI tasks (diagrams, themes, etc.)
+    messages: [], // Centralized chat history for the AI Assistant
     
-    // NEW: State for the current presentation's theme
-    theme: {
-        bg_css: null,
-        primary_color: null,
-        secondary_color: null,
-        accent_color: null,
+    theme: { bg_css: null, primary_color: null, secondary_color: null, accent_color: null },
+    
+    // --- THE "SUPERBOSS" AI ACTION ---
+    /**
+     * The single entry point for all AI commands, from buttons or chat.
+     * @param {object} command - An object containing the task and any necessary context.
+     * @returns {Promise<boolean>} A boolean indicating success or failure.
+     */
+    sendCommand: async (command) => {
+        const { activeSlideId, slides, presentationId, addMessage, loadPresentation } = get();
+
+        // Context validation to provide helpful feedback to the user.
+        if (!activeSlideId && ['generate_diagram', 'generate_image', 'interpret_chat'].includes(command.task)) {
+            toast.error("Please select a slide first.");
+            return false;
+        }
+        if (!presentationId && command.task === 'generate_theme') {
+            toast.error("Please load a presentation first.");
+            return false;
+        }
+        
+        // Use the appropriate loading state based on the task.
+        const isLoadingState = command.task === 'generate_presentation' ? 'isGenerating' : 'isAssistantProcessing';
+        set({ [isLoadingState]: true, generationError: null });
+
+        const activeSlide = slides.find(s => s.id === activeSlideId);
+        
+        // Prepare a comprehensive context object to send to the Superboss API.
+        const context = {
+            presentationId,
+            slideId: activeSlideId,
+            command: command.command, // The raw text from the chat box
+            topic: command.topic, // The topic for a new presentation
+            slideCount: command.slideCount,
+            slideContext: activeSlide ? {
+                title: getElement(activeSlide, 'title')?.content,
+                points: getElement(activeSlide, 'content')?.content,
+            } : null,
+            imageSuggestion: activeSlide ? getElement(activeSlide, 'image_suggestion')?.content : null,
+        };
+
+        try {
+            const response = await fetch('/api/ai-command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task: command.task, context }),
+            });
+
+            if (!response.ok) throw new Error((await response.json()).error || 'The AI failed to execute the command.');
+            
+            const result = await response.json();
+
+            // --- Dispatch the result from the Superboss to the correct state update ---
+            switch (result.type) {
+                case 'presentation_started':
+                    await loadPresentation(result.presentationId);
+                    toast.success("Presentation generated successfully!");
+                    return true; // Signal success to the IdeaView for view switching.
+                
+                case 'diagram':
+                    const newElement = { id: uuidv4(), type: 'diagram', content: result.content, syntax: result.syntax, position: { x: 10, y: 30 }, size: { width: 80, height: 60 } };
+                    set(state => ({ slides: state.slides.map(s => s.id === activeSlideId ? { ...s, elements: [...s.elements, newElement] } : s) }));
+                    addMessage({ role: 'ai', content: `I've created a ${result.syntax} diagram for you.` });
+                    toast.success("Diagram added to slide!");
+                    break;
+                
+                case 'theme':
+                    set({ theme: result.theme });
+                    addMessage({ role: 'ai', content: "I've updated the presentation theme." });
+                    toast.success("New AI theme applied!");
+                    break;
+                
+                case 'image':
+                    set(state => ({ slides: state.slides.map(s => s.id === activeSlideId ? { ...s, image_url: result.imageUrl } : s) }));
+                    updateSlideInDB(activeSlideId, { image_url: result.imageUrl });
+                    addMessage({ role: 'ai', content: "Here is the image you requested." });
+                    toast.success("AI Image generated!");
+                    break;
+                
+                case 'clarification':
+                    addMessage({ role: 'ai', content: result.message });
+                    break;
+                
+                default:
+                    throw new Error("Received an unknown result type from the AI.");
+            }
+        } catch (error) {
+            console.error("AI Command failed:", error);
+            const errorMessage = error.message || "An unknown error occurred.";
+            set({ generationError: errorMessage });
+            toast.error(errorMessage);
+            addMessage({ role: 'ai', content: `Sorry, an error occurred: ${errorMessage}` });
+            return false; // Signal failure.
+        } finally {
+            set({ [isLoadingState]: false });
+        }
+        return true; // Default success
+    },
+    
+    // --- REGULAR STATE MANAGEMENT ACTIONS ---
+    
+    addMessage: (message) => set(state => ({ messages: [...state.messages, message] })),
+    
+    updateElementTransform: (slideId, elementId, newPosition, newSize) => {
+        set(state => ({
+            slides: state.slides.map(slide => {
+                if (slide.id === slideId) {
+                    const newElements = slide.elements.map(el => el.id === elementId ? { ...el, position: newPosition, size: newSize } : el);
+                    updateSlideInDB(slide.id, { elements: newElements });
+                    return { ...slide, elements: newElements };
+                }
+                return slide;
+            })
+        }));
     },
 
-    // ACTIONS
-    setSlides: (slides) => {
-        set({ slides, activeSlideId: slides[0]?.id || null, currentSlideIndex: 0 });
+    updateElementContent: (slideId, elementId, newContent) => {
+        set(state => ({
+            slides: state.slides.map(slide => {
+                if (slide.id === slideId) {
+                    const newElements = slide.elements.map(el => el.id === elementId ? { ...el, content: newContent } : el);
+                    updateSlideInDB(slide.id, { elements: newElements });
+                    return { ...slide, elements: newElements };
+                }
+                return slide;
+            })
+        }));
+    },
+    
+    updateSlideNotes: (slideId, notes) => {
+        set(state => ({
+            slides: state.slides.map(s => {
+                if (s.id === slideId) {
+                    updateSlideInDB(slide.id, { notes: notes });
+                    return { ...s, notes: notes };
+                }
+                return s;
+            })
+        }));
     },
 
+    addSlide: () => {
+        const newSlide = {
+            id: `new-${uuidv4()}`,
+            elements: [
+                { id: uuidv4(), type: 'title', content: 'New Slide Title', position: {x: 5, y: 10}, size: {width: 90, height: 15} },
+                { id: uuidv4(), type: 'content', content: ['Add your bullet points here.'], position: {x: 5, y: 30}, size: {width: 90, height: 60} },
+                { id: uuidv4(), type: 'image_suggestion', content: 'A relevant background image' }
+            ],
+            notes: '', order: get().slides.length + 1, presentation_id: get().presentationId, image_url: null
+        };
+        set(state => ({ slides: [...state.slides, newSlide], activeSlideId: newSlide.id, currentSlideIndex: state.slides.length }));
+        toast.success("New slide added!");
+    },
+    
+    setSlides: (slides) => set({ slides, activeSlideId: slides[0]?.id || null, currentSlideIndex: 0, messages: [] }),
+    
     setActiveSlideId: (id) => {
         const slides = get().slides;
         const index = slides.findIndex(s => s.id === id);
@@ -57,55 +199,17 @@ export const usePresentationStore = create((set, get) => ({
 
     nextSlide: () => {
         const { slides, currentSlideIndex } = get();
-        if (currentSlideIndex < slides.length - 1) {
-            const newIndex = currentSlideIndex + 1;
-            set({ currentSlideIndex: newIndex, activeSlideId: slides[newIndex].id });
-        }
+        if (currentSlideIndex < slides.length - 1) set({ currentSlideIndex: currentSlideIndex + 1, activeSlideId: slides[currentSlideIndex + 1].id });
     },
-
     prevSlide: () => {
         const { slides, currentSlideIndex } = get();
-        if (currentSlideIndex > 0) {
-            const newIndex = currentSlideIndex - 1;
-            set({ currentSlideIndex: newIndex, activeSlideId: slides[newIndex].id });
-        }
-    },
-
-    updateSlide: (id, field, value) => {
-        set(state => ({
-            slides: state.slides.map(s => s.id === id ? { ...s, [field]: value } : s)
-        }));
-    },
-
-    updateSlideInDB: (slide) => updateSlideInDB(slide),
-
-    addSlide: () => {
-        if (get().isGenerating) return; 
-        const newSlide = {
-            id: `new-${uuidv4()}`,
-            title: 'New Slide',
-            points: [],
-            notes: '',
-            order: get().slides.length + 1,
-            presentation_id: get().presentationId, // Use the stored presentation ID
-            image_url: null
-        };
-        set(state => ({
-            slides: [...state.slides, newSlide],
-            activeSlideId: newSlide.id,
-            currentSlideIndex: state.slides.length,
-        }));
+        if (currentSlideIndex > 0) set({ currentSlideIndex: currentSlideIndex - 1, activeSlideId: slides[currentSlideIndex - 1].id });
     },
 
     deleteSlide: async (id) => {
-        if (get().isGenerating) return;
-        const supabase = createClient();
-        set(state => ({
-            slides: state.slides.filter(s => s.id !== id)
-        }));
-        if (!String(id).startsWith('new-')) {
-            await supabase.from('slides').delete().eq('id', id);
-        }
+        set(state => ({ slides: state.slides.filter(s => s.id !== id) }));
+        if (!String(id).startsWith('new-')) await createClient().from('slides').delete().eq('id', id);
+        toast.success("Slide deleted.");
     },
     
     reorderSlides: (startIndex, endIndex) => {
@@ -114,173 +218,44 @@ export const usePresentationStore = create((set, get) => ({
         slides.splice(endIndex, 0, removed);
         const updatedSlides = slides.map((s, index) => ({ ...s, order: index + 1 }));
         set({ slides: updatedSlides });
-        updatedSlides.forEach(slide => updateSlideInDB(slide));
+        updatedSlides.forEach(slide => updateSlideInDB(slide.id, { order: slide.order }));
+        toast.success("Outline reordered.");
     },
-
-    startPresentation: async (config) => {
-        if (get().isGenerating) return false;
-        set({ isGenerating: true, generationError: null, slides: [], activeSlideId: null, presentationId: null, theme: {} });
-        const channelId = `presentation-gen-${uuidv4()}`;
-        const supabase = createClient();
-        const channel = supabase.channel(channelId);
-
-        channel
-            .on('broadcast', { event: 'complete' }, async (payload) => {
-                await get().loadPresentation(payload.payload.presentationId);
-                set({ isGenerating: false }); 
-                supabase.removeChannel(channel);
-            })
-            .on('broadcast', { event: 'error' }, (payload) => {
-                set({ isGenerating: false, generationError: payload.payload.message });
-                supabase.removeChannel(channel);
-            })
-            .subscribe();
-
-        try {
-            await fetch('/api/generate-presentation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...config, channelId }),
-            });
-        } catch (error) {
-            set({ isGenerating: false, generationError: error.message });
-            supabase.removeChannel(channel);
-        }
-        return true;
-    },
-
+    
     fetchHistory: async () => {
-        const supabase = createClient();
         set({ historyLoading: true });
-        const { data, error } = await supabase
-            .from('presentations')
-            .select('id, title, created_at')
-            .order('created_at', { ascending: false });
+        const { data, error } = await createClient().from('presentations').select('id, title, created_at').order('created_at', { ascending: false });
         if (!error) set({ presentationsHistory: data });
+        else toast.error("Could not load history.");
         set({ historyLoading: false });
     },
 
     loadPresentation: async (id) => {
-        set({ isGenerating: true, generationError: null, slides: [], activeSlideId: null, presentationId: null, theme: {} }); 
-        const supabase = createClient();
-        
-        const [presentationRes, slidesRes] = await Promise.all([
-            supabase.from('presentations').select('*').eq('id', id).single(),
-            supabase.from('slides').select('*').eq('presentation_id', id).order('order', { ascending: true })
+        set({ isGenerating: true, generationError: null, slides: [], activeSlideId: null, presentationId: null, theme: {}, messages: [] }); 
+        const promise = Promise.all([
+            createClient().from('presentations').select('*').eq('id', id).single(),
+            createClient().from('slides').select('id, elements, notes, order, image_url, presentation_id').eq('presentation_id', id).order('order', { ascending: true })
         ]);
-        
-        if (slidesRes.error || presentationRes.error) {
-            const error = slidesRes.error || presentationRes.error;
-            console.error("Error loading presentation:", error);
-            set({ generationError: 'Failed to load presentation.', isGenerating: false });
-            return false;
-        }
-
-        set({
-            slides: slidesRes.data,
-            presentationId: presentationRes.data.id,
-            activeSlideId: slidesRes.data[0]?.id || null,
-            currentSlideIndex: 0,
-            theme: {
-                bg_css: presentationRes.data.theme_bg_css,
-                primary_color: presentationRes.data.theme_primary_color,
-                secondary_color: presentationRes.data.theme_secondary_color,
-                accent_color: presentationRes.data.theme_accent_color,
+        toast.promise(promise, {
+            loading: 'Loading presentation...',
+            success: (results) => {
+                const [presentationRes, slidesRes] = results;
+                 if (slidesRes.error || presentationRes.error) throw slidesRes.error || presentationRes.error;
+                set({
+                    slides: slidesRes.data,
+                    presentationId: presentationRes.data.id,
+                    activeSlideId: slidesRes.data[0]?.id || null,
+                    currentSlideIndex: 0,
+                    theme: { bg_css: presentationRes.data.theme_bg_css, primary_color: presentationRes.data.theme_primary_color, secondary_color: presentationRes.data.theme_secondary_color, accent_color: presentationRes.data.theme_accent_color },
+                    isGenerating: false 
+                });
+                return `Loaded "${presentationRes.data.title}"`;
             },
-            isGenerating: false 
+            error: (err) => {
+                set({ generationError: 'Failed to load presentation.', isGenerating: false });
+                return `Error: ${err.message}`;
+            }
         });
-        return true;
+        return promise.then(() => true).catch(() => false);
     },
-
-    // --- AI FEATURE ACTIONS ---
-
-    generateDiagramForSlide: async (slideId) => {
-        if (!slideId || get().isDiagramGenerating) return;
-        set({ isDiagramGenerating: true });
-
-        const slide = get().slides.find(s => s.id === slideId);
-        if (!slide) {
-            set({ isDiagramGenerating: false });
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/generate-diagram', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ slideTitle: slide.title, slidePoints: slide.points }),
-            });
-            if (!response.ok) throw new Error('Diagram generation failed.');
-            
-            const { diagram } = await response.json();
-            if (diagram) {
-                const newPoints = [...(slide.points || []), diagram];
-                get().updateSlide(slideId, 'points', newPoints);
-                updateSlideInDB({ ...slide, points: newPoints });
-            }
-        } catch (error) {
-            console.error("Error generating diagram:", error);
-        } finally {
-            set({ isDiagramGenerating: false });
-        }
-    },
-    
-    generateImageForSlide: async (slideId) => {
-        if (!slideId || get().isImageGenerating) return;
-        set({ isImageGenerating: true });
-
-        const slide = get().slides.find(s => s.id === slideId);
-        if (!slide || !slide.image_suggestion) {
-            console.error("No image suggestion found for this slide.");
-            set({ isImageGenerating: false });
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/generate-image', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageSuggestion: slide.image_suggestion, slideId }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Image generation API call failed.');
-            }
-
-            const { imageUrl } = await response.json();
-            if (imageUrl) {
-                get().updateSlide(slideId, 'image_url', imageUrl);
-            }
-        } catch (error) {
-            console.error("Error generating image:", error);
-        } finally {
-            set({ isImageGenerating: false });
-        }
-    },
-
-    generateThemeForPresentation: async () => {
-        const { presentationId, slides } = get();
-        if (!presentationId || get().isThemeGenerating) return;
-        set({ isThemeGenerating: true });
-
-        const presentationTitle = slides[0]?.title || "Untitled Presentation";
-
-        try {
-            const response = await fetch('/api/generate-theme', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ presentationTitle, presentationId }),
-            });
-            if (!response.ok) throw new Error('Theme generation failed.');
-
-            const { theme } = await response.json();
-            if (theme) {
-                set({ theme: theme });
-            }
-        } catch (error) {
-            console.error("Error generating theme:", error);
-        } finally {
-            set({ isThemeGenerating: false });
-        }
-    }
 }));

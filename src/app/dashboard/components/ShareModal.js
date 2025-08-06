@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiLink, FiClipboard, FiCheck } from 'react-icons/fi';
+import { FiLink, FiClipboard, FiCheck, FiLoader } from 'react-icons/fi';
 import { usePresentationStore } from '../../../utils/store';
 import { createClient } from '../../../utils/supabase/client';
+import toast from 'react-hot-toast';
 
 export const ShareModal = ({ isOpen, onClose }) => {
     const supabase = createClient();
-    const slides = usePresentationStore(state => state.slides);
+    const presentationId = usePresentationStore(state => state.presentationId);
     const [presentationData, setPresentationData] = useState(null);
     const [isPublic, setIsPublic] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -14,9 +15,8 @@ export const ShareModal = ({ isOpen, onClose }) => {
 
     useEffect(() => {
         const fetchPresentationStatus = async () => {
-            if (isOpen && slides.length > 0) {
+            if (isOpen && presentationId) {
                 setIsLoading(true);
-                const presentationId = slides[0].presentation_id;
                 const { data, error } = await supabase
                     .from('presentations')
                     .select('is_public, share_id')
@@ -27,17 +27,17 @@ export const ShareModal = ({ isOpen, onClose }) => {
                     setPresentationData(data);
                     setIsPublic(data.is_public);
                 } else if (error) {
+                    toast.error("Error fetching presentation status.");
                     console.error("Error fetching presentation status:", error);
                 }
                 setIsLoading(false);
             }
         };
         fetchPresentationStatus();
-    }, [isOpen, slides, supabase]);
+    }, [isOpen, presentationId, supabase]);
 
     const handleTogglePublic = async () => {
         setIsLoading(true);
-        const presentationId = slides[0].presentation_id;
         const newPublicStatus = !isPublic;
         const { data, error } = await supabase
             .from('presentations')
@@ -47,9 +47,11 @@ export const ShareModal = ({ isOpen, onClose }) => {
             .single();
         
         if (!error) {
+            toast.success(`Presentation is now ${newPublicStatus ? 'public' : 'private'}.`);
             setIsPublic(newPublicStatus);
             setPresentationData(prev => ({ ...prev, share_id: data.share_id }));
         } else {
+            toast.error("Failed to update public status.");
             console.error("Failed to update public status", error);
         }
         setIsLoading(false);
@@ -60,6 +62,7 @@ export const ShareModal = ({ isOpen, onClose }) => {
             const url = `${window.location.origin}/share/${presentationData.share_id}`;
             navigator.clipboard.writeText(url);
             setCopied(true);
+            toast.success("Link copied to clipboard!");
             setTimeout(() => setCopied(false), 2000);
         }
     };
@@ -95,7 +98,7 @@ export const ShareModal = ({ isOpen, onClose }) => {
                             <p className="text-sm text-gray-400 text-center p-4 bg-white/5 rounded-lg">Enable public access to get a shareable link.</p>
                         )}
 
-                        {isLoading && !isPublic && (
+                        {isLoading && (
                              <div className="w-full h-10 flex items-center justify-center">
                                 <FiLoader className="animate-spin text-white"/>
                              </div>

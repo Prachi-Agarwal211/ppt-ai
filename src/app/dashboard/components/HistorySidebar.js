@@ -1,4 +1,4 @@
-import { FiLoader } from 'react-icons/fi';
+import { FiLoader, FiInbox } from 'react-icons/fi';
 
 const HistoryItemSkeleton = () => (
     <div className="w-full p-3 rounded-lg bg-white/5 animate-pulse">
@@ -21,7 +21,11 @@ export const HistorySidebar = ({ history, onLoad, isLoading }) => (
                 </button>
             ))
         ) : (
-            <p className="text-center text-sm text-gray-500 mt-4">No presentations found.</p>
+            <div className="text-center text-gray-500 mt-8 flex flex-col items-center p-4">
+                <FiInbox className="text-4xl mb-3" />
+                <h4 className="font-semibold text-gray-300">No History Yet</h4>
+                <p className="text-sm">Your past presentations will appear here once you create them.</p>
+            </div>
         )}
       </div>
     </>

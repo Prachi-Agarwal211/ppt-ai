@@ -13,7 +13,7 @@ const isValidEmail = (email) => {
 };
 
 /**
- * NetherAISignIn Component - v18 (UI/UX Enhanced)
+ * NetherAISignIn Component - The root page for user authentication.
  */
 export default function NetherAISignIn() {
   const supabase = createClient();
@@ -182,69 +182,87 @@ export default function NetherAISignIn() {
 
   const renderView = () => {
     switch (view) {
-      case 'signUp': return (
-        <motion.div key="signUp" variants={formVariants} initial="hidden" animate="visible" exit="exit">
-          <motion.form onSubmit={handleSignUp} className="space-y-4" initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.07 } } }}>
-            <div className="grid grid-cols-2 gap-4">
-              {renderInput('firstName', 'text', 'First Name', formState.firstName)}
-              {renderInput('lastName', 'text', 'Last Name', formState.lastName)}
-            </div>
-            {renderInput('username', 'text', 'Username', formState.username)}
-            {renderInput('email', 'email', 'Email Address', formState.email)}
-            {renderInput('phone', 'tel', 'Phone Number', formState.phone, false)}
-            {renderInput('dob', 'date', 'Date of Birth', formState.dob)}
-            {renderPasswordInput('password', 'Password', formState.password)}
-            <motion.div variants={itemVariants}>
-              <motion.button type="submit" disabled={loading} className="primary-button w-full justify-center">
-                <span>{loading ? 'Creating Account...' : 'Create Account'}</span>
-              </motion.button>
-            </motion.div>
-          </motion.form>
-          <p className="text-center text-sm text-gray-400 mt-4"> Already have an account?{' '}
-            <button onClick={() => setView('signIn')} className="font-medium text-peachSoft hover:text-white transition-colors">Sign In</button>
-          </p>
-        </motion.div>
-      );
-      case 'forgotPassword': return (
-        <motion.div key="forgotPassword" variants={formVariants} initial="hidden" animate="visible" exit="exit">
-           <motion.form onSubmit={handlePasswordReset} className="space-y-6" initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.1 } } }}>
-            {renderInput('email', 'email', 'Email Address', formState.email)}
-            <motion.div variants={itemVariants}>
-              <motion.button type="submit" disabled={loading} className="primary-button w-full justify-center">
-                <span>{loading ? 'Sending Reset Link...' : 'Send Reset Link'}</span>
-              </motion.button>
-            </motion.div>
-          </motion.form>
-          <p className="text-center text-sm text-gray-400 mt-4"> Remembered your password?{' '}
-            <button onClick={() => setView('signIn')} className="font-medium text-peachSoft hover:text-white transition-colors">Sign In</button>
-          </p>
-        </motion.div>
-      );
-      default: return ( // signIn
-        <motion.div key="signIn" variants={formVariants} initial="hidden" animate="visible" exit="exit">
-          <motion.form onSubmit={handleSignIn} className="space-y-6" initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.1 } } }}>
-            {renderInput('email', 'email', 'Email Address', formState.email)}
-            {renderPasswordInput('password', 'Password', formState.password)}
-            <motion.div variants={itemVariants} className="text-right">
-              <button type="button" onClick={() => setView('forgotPassword')} className="text-sm font-medium text-peachSoft hover:text-white transition-colors">Forgot Password?</button>
-            </motion.div>
-            <motion.div variants={itemVariants}>
-              <motion.button type="submit" disabled={loading} className="primary-button w-full justify-center">
-                <span>{loading ? 'Signing In...' : 'Sign In'}</span>
-              </motion.button>
-            </motion.div>
-          </motion.form>
-          <motion.div className="my-6 flex items-center"><div className="flex-grow border-t border-white/10" /><span className="mx-4 flex-shrink text-xs uppercase text-gray-500">Or</span><div className="flex-grow border-t border-white/10" /></motion.div>
-          <motion.div className="space-y-3">
-            <motion.button className="secondary-button w-full" onClick={() => handleOAuthSignIn('google')} disabled={loading}>
-              <FaGoogle className="mr-3 h-5 w-5" /> Continue with Google
-            </motion.button>
+      case 'signUp':
+        return (
+          <motion.div key="signUp" variants={formVariants} initial="hidden" animate="visible" exit="exit">
+            <motion.form onSubmit={handleSignUp} className="space-y-4" initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.07 } } }}>
+              <div className="grid grid-cols-2 gap-4">
+                {renderInput('firstName', 'text', 'First Name', formState.firstName)}
+                {renderInput('lastName', 'text', 'Last Name', formState.lastName)}
+              </div>
+              {renderInput('username', 'text', 'Username', formState.username)}
+              {renderInput('email', 'email', 'Email Address', formState.email)}
+              {renderInput('phone', 'tel', 'Phone Number', formState.phone, false)}
+              {renderInput('dob', 'date', 'Date of Birth', formState.dob)}
+              {renderPasswordInput('password', 'Password', formState.password)}
+              <motion.div variants={itemVariants}>
+                <motion.button type="submit" disabled={loading} className="primary-button w-full justify-center">
+                  <span>{loading ? 'Creating Account...' : 'Create Account'}</span>
+                </motion.button>
+              </motion.div>
+            </motion.form>
+            <p className="text-center text-sm text-gray-400 mt-4">
+              Already have an account?{' '}
+              <button onClick={() => setView('signIn')} className="font-medium text-peachSoft hover:text-white transition-colors">
+                Sign In
+              </button>
+            </p>
           </motion.div>
-          <p className="text-center text-sm text-gray-400 mt-6"> Don't have an account?{' '}
-            <button onClick={() => setView('signUp')} className="font-medium text-peachSoft hover:text-white transition-colors">Sign Up</button>
-          </p>
-        </motion.div>
-      );
+        );
+      case 'forgotPassword':
+        return (
+          <motion.div key="forgotPassword" variants={formVariants} initial="hidden" animate="visible" exit="exit">
+            <motion.form onSubmit={handlePasswordReset} className="space-y-6" initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.1 } } }}>
+              {renderInput('email', 'email', 'Email Address', formState.email)}
+              <motion.div variants={itemVariants}>
+                <motion.button type="submit" disabled={loading} className="primary-button w-full justify-center">
+                  <span>{loading ? 'Sending Reset Link...' : 'Send Reset Link'}</span>
+                </motion.button>
+              </motion.div>
+            </motion.form>
+            <p className="text-center text-sm text-gray-400 mt-4">
+              Remembered your password?{' '}
+              <button onClick={() => setView('signIn')} className="font-medium text-peachSoft hover:text-white transition-colors">
+                Sign In
+              </button>
+            </p>
+          </motion.div>
+        );
+      default: // signIn view
+        return (
+          <motion.div key="signIn" variants={formVariants} initial="hidden" animate="visible" exit="exit">
+            <motion.form onSubmit={handleSignIn} className="space-y-6" initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.1 } } }}>
+              {renderInput('email', 'email', 'Email Address', formState.email)}
+              {renderPasswordInput('password', 'Password', formState.password)}
+              <motion.div variants={itemVariants} className="text-right">
+                <button type="button" onClick={() => setView('forgotPassword')} className="text-sm font-medium text-peachSoft hover:text-white transition-colors">
+                  Forgot Password?
+                </button>
+              </motion.div>
+              <motion.div variants={itemVariants}>
+                <motion.button type="submit" disabled={loading} className="primary-button w-full justify-center">
+                  <span>{loading ? 'Signing In...' : 'Sign In'}</span>
+                </motion.button>
+              </motion.div>
+            </motion.form>
+            <motion.div className="my-6 flex items-center">
+              <div className="flex-grow border-t border-white/10" />
+              <span className="mx-4 flex-shrink text-xs uppercase text-gray-500">Or</span>
+              <div className="flex-grow border-t border-white/10" />
+            </motion.div>
+            <motion.div className="space-y-3">
+              <motion.button className="secondary-button w-full" onClick={() => handleOAuthSignIn('google')} disabled={loading}>
+                <FaGoogle className="mr-3 h-5 w-5" /> Continue with Google
+              </motion.button>
+            </motion.div>
+            <p className="text-center text-sm text-gray-400 mt-6">
+              Don't have an account?{' '}
+              <button onClick={() => setView('signUp')} className="font-medium text-peachSoft hover:text-white transition-colors">
+                Sign Up
+              </button>
+            </p>
+          </motion.div>
+        );
     }
   };
 

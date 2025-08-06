@@ -2,8 +2,10 @@
 
 import React, { Suspense } from 'react';
 import dynamic from 'next/dynamic';
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist } from "next/font/google";
+import { Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Toaster } from 'react-hot-toast';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,6 +36,15 @@ export default function RootLayout({ children }) {
         <div className="relative z-[1] min-h-screen">
           {children}
         </div>
+        <Toaster 
+          position="bottom-center"
+          toastOptions={{
+            style: {
+              background: '#333',
+              color: '#fff',
+            },
+          }}
+        />
       </body>
     </html>
   );
