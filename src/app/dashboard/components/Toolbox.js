@@ -1,7 +1,8 @@
+'use client'; // --- FIX: This component uses hooks, so it must be a Client Component.
+
 import { FiCpu, FiGitMerge, FiLayers, FiSettings, FiImage, FiVideo, FiLoader } from 'react-icons/fi';
 import { usePresentationStore, getElement } from '@/utils/store';
 
-// A reusable button component to keep the code clean and consistent.
 const AiButton = ({ command, title, icon: Icon, disabled, tooltip }) => {
     const { sendCommand, isAssistantProcessing } = usePresentationStore();
     const isDisabled = disabled || isAssistantProcessing;

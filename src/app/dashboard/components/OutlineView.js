@@ -1,91 +1,85 @@
+'use client'; 
 import { motion } from 'framer-motion';
 import { usePresentationStore, getElement } from '@/utils/store';
-import { Toolbox } from './Toolbox';
-import { FiLayout, FiEdit2 } from 'react-icons/fi';
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { Toolbox } from '@/app/dashboard/components/Toolbox';
+import { FiEdit2, FiLayout } from 'react-icons/fi';
+import { useMemo, useCallback, useEffect, useRef } from 'react';
 
-// Debounced save hook to prevent saving on every keystroke
-const useDebouncedSave = (slide) => {
-    const { updateSlideInDB } = usePresentationStore();
-    const [isSaving, setIsSaving] = useState(false);
+const useDebouncedSave = (slide, updateSlideInDB) => {
     const timeoutRef = useRef(null);
-
-    useEffect(() => {
-        if (!slide || (typeof slide.id === 'string' && slide.id.startsWith('new-'))) return;
-
+    const debouncedSave = useCallback((slideData) => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
-
-        timeoutRef.current = setTimeout(async () => {
-            setIsSaving(true);
-            await updateSlideInDB(slide.id, { elements: slide.elements, notes: slide.notes });
-            setIsSaving(false);
+        timeoutRef.current = setTimeout(() => {
+            if (slide && !(typeof slide.id === 'string' && slide.id.startsWith('new-'))) {
+                updateSlideInDB(slide.id, slideData);
+            }
         }, 1500);
-
-        return () => {
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        };
-    }, [slide?.elements, slide?.notes, slide?.id, updateSlideInDB]);
-
-    return isSaving;
+    }, [slide, updateSlideInDB]);
+    useEffect(() => () => { if (timeoutRef.current) clearTimeout(timeoutRef.current) }, []);
+    return debouncedSave;
 };
 
-export const OutlineView = ({ onProceed }) => {
+export const OutlineView = ({ setView }) => {
+    // --- FIX: Selecting state individually to prevent re-render loops. ---
     const slides = usePresentationStore(state => state.slides);
     const activeSlideId = usePresentationStore(state => state.activeSlideId);
     const updateElementContent = usePresentationStore(state => state.updateElementContent);
     const updateSlideNotes = usePresentationStore(state => state.updateSlideNotes);
+    const updateSlideInDB = usePresentationStore(state => state.updateSlideInDB);
 
     const slide = useMemo(() => slides.find(s => s.id === activeSlideId), [slides, activeSlideId]);
-    const isSaving = useDebouncedSave(slide);
-
     const titleElement = useMemo(() => getElement(slide, 'title'), [slide]);
     const contentElement = useMemo(() => getElement(slide, 'content'), [slide]);
-    
-    if (!slide || !titleElement || !contentElement) {
+    const debouncedSave = useDebouncedSave(slide, updateSlideInDB);
+
+    if (!slide) {
         return (
             <div className="flex h-full w-full flex-col items-center justify-center text-gray-500">
                 <FiEdit2 className="mb-4 text-4xl" />
                 <h3 className="text-xl font-semibold text-gray-300">Select a Slide to Edit</h3>
-                <p>Choose a slide from the outline on the left to start editing its content.</p>
+                <p>Choose a slide from the left to review and enhance the AI's plan.</p>
             </div>
         );
     }
-
-    const handlePointsChange = (e) => {
-        const value = e.target.value;
-        const pointsArray = value === '' ? [] : value.split('\n');
-        updateElementContent(slide.id, contentElement.id, pointsArray);
+    
+    const handleContentChange = (newContent, type) => {
+        let slideDataToSave = {};
+        if (type === 'title') {
+            updateElementContent(slide.id, titleElement.id, newContent);
+            slideDataToSave = { elements: slide.elements.map(el => el.id === titleElement.id ? { ...el, content: newContent } : el) };
+        } else if (type === 'points') {
+            const pointsArray = newContent === '' ? [] : newContent.split('\n');
+            updateElementContent(slide.id, contentElement.id, pointsArray);
+            slideDataToSave = { elements: slide.elements.map(el => el.id === contentElement.id ? { ...el, content: pointsArray } : el) };
+        } else if (type === 'notes') {
+            updateSlideNotes(slide.id, newContent);
+            slideDataToSave = { notes: newContent };
+        }
+        debouncedSave(slideDataToSave);
     };
     
-    const handleTitleChange = (e) => {
-        updateElementContent(slide.id, titleElement.id, e.target.value);
-    };
-
     const pointsAsText = Array.isArray(contentElement.content) ? contentElement.content.join('\n') : '';
 
     return (
         <motion.div key="outline" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} className="h-full flex flex-col">
             <div className="flex-grow overflow-y-auto pr-4 space-y-6">
                 <div>
-                    <label className="text-sm font-medium text-gray-300 flex items-center">
-                        Title
-                        {isSaving && <span className="ml-2 text-xs text-gray-400 animate-pulse">Saving...</span>}
-                    </label>
-                    <input type="text" value={titleElement.content} onChange={handleTitleChange} className="mt-1 block w-full text-2xl font-bold rounded-lg border border-transparent bg-transparent px-2 py-1 text-white focus:outline-none focus:border-white/20 focus:bg-white/5" />
+                    <label className="text-sm font-medium text-gray-300">Title</label>
+                    <input type="text" value={titleElement.content} onChange={(e) => handleContentChange(e.target.value, 'title')} className="mt-1 block w-full text-2xl font-bold rounded-lg border border-transparent bg-transparent px-2 py-1 text-white focus:outline-none focus:border-white/20 focus:bg-white/5" />
                 </div>
                 <div>
                     <label className="text-sm font-medium text-gray-300">Content (one bullet point per line)</label>
-                    <textarea value={pointsAsText} onChange={handlePointsChange} rows={8} className="mt-1 block w-full rounded-lg border border-transparent bg-transparent px-2 py-1 text-white resize-none focus:outline-none focus:border-white/20 focus:bg-white/5" />
+                    <textarea value={pointsAsText} onChange={(e) => handleContentChange(e.target.value, 'points')} rows={8} className="mt-1 block w-full rounded-lg border border-transparent bg-transparent px-2 py-1 text-white resize-none focus:outline-none focus:border-white/20 focus:bg-white/5" />
                 </div>
                 <div>
                     <label className="text-sm font-medium text-gray-300">Speaker Notes</label>
-                    <textarea value={slide.notes || ''} onChange={(e) => updateSlideNotes(slide.id, e.target.value)} rows={4} className="mt-1 block w-full rounded-lg border border-white/20 bg-white/5 px-2 py-1 text-white resize-none" />
+                    <textarea value={slide.notes || ''} onChange={(e) => handleContentChange(e.target.value, 'notes')} rows={4} className="mt-1 block w-full rounded-lg border border-white/20 bg-white/5 px-2 py-1 text-white resize-none" />
                 </div>
             </div>
-            <div className="flex-shrink-0 mt-4">
+            <div className="flex-shrink-0 mt-4 space-y-4">
                 <Toolbox />
-                <motion.button onClick={onProceed} className="primary-button mt-4 w-full justify-center">
-                    <FiLayout className="mr-2" /> Proceed to Deck
+                <motion.button onClick={() => setView('deck')} className="primary-button w-full justify-center">
+                    <FiLayout className="mr-2" /> Finalize & View Deck
                 </motion.button>
             </div>
         </motion.div>

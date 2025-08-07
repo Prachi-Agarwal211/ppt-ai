@@ -1,9 +1,9 @@
+'use client';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { FiPlus, FiTrash2, FiLoader } from 'react-icons/fi';
 import { usePresentationStore, getElement } from '@/utils/store';
 import { useMemo } from 'react';
 
-// A memoized component to prevent re-rendering every slide preview on every state change
 const SlidePreview = ({ slide }) => {
     const title = useMemo(() => getElement(slide, 'title')?.content || 'Untitled Slide', [slide]);
     const pointsText = useMemo(() => {
@@ -20,15 +20,14 @@ const SlidePreview = ({ slide }) => {
 };
 
 export const LeftSidebar = () => {
-    const { 
-        slides, 
-        activeSlideId, 
-        setActiveSlideId, 
-        addSlide, 
-        deleteSlide, 
-        reorderSlides, 
-        isGenerating 
-    } = usePresentationStore();
+    // --- FIX: Selecting state individually to prevent re-render loops. ---
+    const slides = usePresentationStore(state => state.slides);
+    const activeSlideId = usePresentationStore(state => state.activeSlideId);
+    const setActiveSlideId = usePresentationStore(state => state.setActiveSlideId);
+    const addSlide = usePresentationStore(state => state.addSlide);
+    const deleteSlide = usePresentationStore(state => state.deleteSlide);
+    const reorderSlides = usePresentationStore(state => state.reorderSlides);
+    const isGenerating = usePresentationStore(state => state.isGenerating);
 
     const onDragEnd = (result) => {
         if (!result.destination) {

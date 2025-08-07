@@ -39,16 +39,23 @@ export const usePresentationStore = create(
             
             theme: { bg_css: null, primary_color: null, secondary_color: null, accent_color: null },
             
+            // --- FIX: Add a new action to reset the presentation state ---
+            startNewPresentation: () => {
+                set({
+                    slides: [],
+                    presentationId: null,
+                    activeSlideId: null,
+                    currentSlideIndex: 0,
+                    messages: [],
+                    theme: { bg_css: null, primary_color: null, secondary_color: null, accent_color: null },
+                    generationError: null,
+                });
+            },
+
             // --- THE "SUPERBOSS" AI ACTION ---
-            /**
-             * The single entry point for all AI commands, from buttons or chat.
-             * @param {object} command - An object containing the task and any necessary context.
-             * @returns {Promise<boolean>} A boolean indicating success or failure.
-             */
             sendCommand: async (command) => {
                 const { activeSlideId, slides, presentationId, addMessage, loadPresentation } = get();
 
-                // Context validation to provide helpful feedback to the user.
                 if (!activeSlideId && ['generate_diagram', 'generate_image', 'interpret_chat'].includes(command.task)) {
                     toast.error("Please select a slide first.");
                     return false;
@@ -58,18 +65,16 @@ export const usePresentationStore = create(
                     return false;
                 }
                 
-                // Use the appropriate loading state based on the task.
                 const isLoadingState = command.task === 'generate_presentation' ? 'isGenerating' : 'isAssistantProcessing';
                 set({ [isLoadingState]: true, generationError: null });
 
                 const activeSlide = slides.find(s => s.id === activeSlideId);
                 
-                // Prepare a comprehensive context object to send to the Superboss API.
                 const context = {
                     presentationId,
                     slideId: activeSlideId,
-                    command: command.command, // The raw text from the chat box
-                    topic: command.topic, // The topic for a new presentation
+                    command: command.command,
+                    topic: command.topic,
                     slideCount: command.slideCount,
                     slideContext: activeSlide ? {
                         title: getElement(activeSlide, 'title')?.content,
@@ -88,11 +93,9 @@ export const usePresentationStore = create(
                     if (!response.ok) {
                         let errorMessage = 'An unexpected error occurred.';
                         try {
-                            // Attempt to parse a JSON error response from the server
                             const errorBody = await response.json();
                             errorMessage = errorBody.error || errorMessage;
                         } catch (e) {
-                            // If the response body isn't JSON, use the HTTP status text
                             errorMessage = `Server error: ${response.status} ${response.statusText}`;
                         }
                         throw new Error(errorMessage);
@@ -100,12 +103,11 @@ export const usePresentationStore = create(
                     
                     const result = await response.json();
 
-                    // --- Dispatch the result from the Superboss to the correct state update ---
                     switch (result.type) {
                         case 'presentation_started':
                             await loadPresentation(result.presentationId);
                             toast.success("Presentation generated successfully!");
-                            return true; // Signal success to the IdeaView for view switching.
+                            return true;
                         
                         case 'diagram':
                             const newElement = { id: uuidv4(), type: 'diagram', content: result.content, syntax: result.syntax, position: { x: 10, y: 30 }, size: { width: 80, height: 60 } };
@@ -140,11 +142,11 @@ export const usePresentationStore = create(
                     set({ generationError: errorMessage });
                     toast.error(errorMessage);
                     addMessage({ role: 'ai', content: `Sorry, an error occurred: ${errorMessage}` });
-                    return false; // Signal failure.
+                    return false;
                 } finally {
                     set({ [isLoadingState]: false });
                 }
-                return true; // Default success
+                return true;
             },
             
             // --- REGULAR STATE MANAGEMENT ACTIONS ---
@@ -274,8 +276,8 @@ export const usePresentationStore = create(
             },
         }),
         {
-            name: 'presentation-storage', // unique name
-            storage: createJSONStorage(() => localStorage), // (optional) by default, 'localStorage' is used
+            name: 'presentation-storage',
+            storage: createJSONStorage(() => localStorage),
         }
     )
 );
