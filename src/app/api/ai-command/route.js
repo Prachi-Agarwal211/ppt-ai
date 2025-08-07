@@ -5,25 +5,28 @@ import { Buffer } from 'buffer';
 import { createClient } from '@supabase/supabase-js';
 
 // --- Environment Variable Validation ---
-// This check is critical to prevent the server from starting in a broken state
-// and provides clear errors if configuration is missing.
-const requiredEnvVars = ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'OPENROUTER_API_KEY'];
+const requiredEnvVars = [
+    'NEXT_PUBLIC_SUPABASE_URL', 
+    'SUPABASE_SERVICE_ROLE_KEY', 
+    'OPENROUTER_API_KEY',
+    'PRESENTATION_MODEL',
+    'DIAGRAM_MODEL',
+    'IMAGE_MODEL',
+    'THEME_MODEL',
+    'INTERPRETATION_MODEL'
+];
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120; // Increased timeout for long AI tasks
 
 // Initialize the Supabase admin client for secure, server-side operations
-// It will be null if keys are missing, which is handled in the POST function.
 const supabaseAdmin = missingEnvVars.length === 0
     ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
     : null;
 
-// --- WORKER FUNCTIONS (The "Sub-AIs") ---
+// --- WORKER FUNCTIONS ---
 
-/**
- * WORKER: Generates a brand new presentation from a topic.
- */
 async function handleGeneratePresentation(context, user) {
     const { topic, slideCount } = context;
     if (!topic || !slideCount) throw new Error("Missing topic or slide count for presentation generation.");
@@ -41,14 +44,14 @@ async function handleGeneratePresentation(context, user) {
 
       RULES:
       - Every slide MUST have one "title" element and one "image_suggestion" element.
-      - Position elements logically (e.g., title at top, content below).
+      - Position elements logically.
       - Do not include markdown wrappers like \`\`\`json or any explanations.
     `;
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'moonshotai/kimi-k2:free', messages: [{ role: 'user', content: masterPrompt }] }),
+        body: JSON.stringify({ model: process.env.PRESENTATION_MODEL, messages: [{ role: 'user', content: masterPrompt }] }),
     });
 
     if (!response.ok) throw new Error(`AI API call failed with status: ${response.status}`);
@@ -56,7 +59,6 @@ async function handleGeneratePresentation(context, user) {
     const aiResponse = await response.json();
     const content = aiResponse.choices[0].message.content;
     
-    // Robustly find the JSON object within the AI's response string.
     const startIndex = content.indexOf('{');
     const endIndex = content.lastIndexOf('}') + 1;
     if (startIndex === -1 || endIndex === 0) {
@@ -80,9 +82,6 @@ async function handleGeneratePresentation(context, user) {
     return { type: 'presentation_started', presentationId: presentation.id };
 }
 
-/**
- * WORKER: Generates a diagram SVG using Kroki.
- */
 async function generateDiagram(context) {
     const { slideContext } = context;
     if (!slideContext) throw new Error("Missing slide context for diagram generation.");
@@ -91,7 +90,7 @@ async function generateDiagram(context) {
     const codeGenResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'google/gemma-2-9b-it:free', messages: [{ role: 'user', content: codeGenPrompt }] }),
+        body: JSON.stringify({ model: process.env.DIAGRAM_MODEL, messages: [{ role: 'user', content: codeGenPrompt }] }),
     });
     if (!codeGenResponse.ok) throw new Error("AI failed to generate diagram code.");
     const diagramData = await codeGenResponse.json();
@@ -103,9 +102,6 @@ async function generateDiagram(context) {
     return { type: 'diagram', content: svg, syntax };
 }
 
-/**
- * WORKER: Generates an image URL for the current slide.
- */
 async function generateImage(context) {
     const { imageSuggestion, slideId } = context;
     if (!imageSuggestion || !slideId) throw new Error("Missing image suggestion or slide ID.");
@@ -114,7 +110,7 @@ async function generateImage(context) {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'stabilityai/stable-diffusion-3-medium', messages: [{ role: 'user', content: masterPrompt }] }),
+        body: JSON.stringify({ model: process.env.IMAGE_MODEL, messages: [{ role: 'user', content: masterPrompt }] }),
     });
     if (!response.ok) throw new Error("AI failed to generate an image.");
     
@@ -126,9 +122,6 @@ async function generateImage(context) {
     return { type: 'image', imageUrl };
 }
 
-/**
- * WORKER: Generates a new theme for the entire presentation.
- */
 async function generateTheme(context) {
     const { presentationId, command } = context;
     if (!presentationId) throw new Error("Missing presentation ID for theme generation.");
@@ -137,7 +130,7 @@ async function generateTheme(context) {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'google/gemma-2-9b-it:free', messages: [{ role: 'user', content: themeGenPrompt }] }),
+        body: JSON.stringify({ model: process.env.THEME_MODEL, messages: [{ role: 'user', content: themeGenPrompt }] }),
     });
     if (!response.ok) throw new Error("AI failed to generate a theme.");
     const theme = JSON.parse((await response.json()).choices[0].message.content.trim());
@@ -155,7 +148,6 @@ async function generateTheme(context) {
 
 // --- "SUPER AI" API ROUTE (The Command Center) ---
 export async function POST(request) {
-    // Immediately fail if the server environment is not configured correctly.
     if (!supabaseAdmin || missingEnvVars.length > 0) {
         const errorMessage = `Server configuration error: The following environment variables are missing: ${missingEnvVars.join(', ')}`;
         return NextResponse.json({ error: errorMessage }, { status: 500 });
@@ -164,12 +156,27 @@ export async function POST(request) {
     const { task, context } = await request.json();
     const cookieStore = cookies();
 
-    // The modern, correct way to pass cookies to the Supabase server client.
+    // **FIX:** The entire cookie handling object is provided, as required by @supabase/ssr.
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        { cookies: () => cookieStore }
+        {
+            cookies: {
+              get(name) {
+                return cookieStore.get(name)?.value;
+              },
+              set(name, value, options) {
+                // The `set` method must be available...
+                cookieStore.set({ name, value, ...options });
+              },
+              remove(name, options) {
+                // The `remove` method must be available...
+                cookieStore.set({ name, value: '', ...options });
+              },
+            },
+        }
     );
+    
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -178,13 +185,12 @@ export async function POST(request) {
 
     try {
         let finalTask = task;
-        // If the task comes from chat, use the AI brain to determine the real task.
         if (task === 'interpret_chat') {
             const interpretationPrompt = `You are an AI task orchestrator. Analyze the user's command and context, then return a JSON object with a "task" key. The task must be one of: "generate_diagram", "generate_theme", "generate_image", "generate_presentation", or "clarify". Command: "${context.command}"`;
             const brainResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: 'mistralai/mistral-large', messages: [{ role: 'user', content: interpretationPrompt }] }),
+                body: JSON.stringify({ model: process.env.INTERPRETATION_MODEL, messages: [{ role: 'user', content: interpretationPrompt }] }),
             });
             if (!brainResponse.ok) throw new Error("AI Brain failed to interpret command.");
             const decision = await brainResponse.json();
@@ -207,14 +213,13 @@ export async function POST(request) {
                 result = await generateImage(context);
                 break;
             default:
-                return NextResponse.json({ type: 'clarification', message: "I'm not sure how to handle that. Could you be more specific?" });
+                result = { type: 'clarification', message: "I'm not sure how to handle that. Could you be more specific?" };
         }
         
         return NextResponse.json(result);
 
     } catch (error) {
         console.error('AI Command Error:', error.message);
-        // Ensure that even in case of an error, a valid JSON response is sent.
         return NextResponse.json({ error: error.message || 'An internal server error has occurred.' }, { status: 500 });
     }
 }

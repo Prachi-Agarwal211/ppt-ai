@@ -12,6 +12,11 @@ const isValidEmail = (email) => {
   return emailRegex.test(email);
 };
 
+const isStrongPassword = (password) => {
+    const strongPasswordRegex = new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{8,})");
+    return strongPasswordRegex.test(password);
+};
+
 /**
  * NetherAISignIn Component - The root page for user authentication.
  */
@@ -64,8 +69,8 @@ export default function NetherAISignIn() {
       setError('Please enter a valid email address.');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    if (!isStrongPassword(password)) {
+      setError('Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character.');
       return;
     }
 
@@ -75,7 +80,13 @@ export default function NetherAISignIn() {
       email, password, phone,
       options: { data: { first_name: firstName, last_name: lastName, username, date_of_birth: dob, phone }, emailRedirectTo: `${window.location.origin}/` },
     });
-    if (error) setError(error.message);
+    if (error) {
+        if (error.message.includes('User already registered')) {
+            setError('An account with this email already exists. Would you like to sign in or reset your password?');
+        } else {
+            setError(error.message);
+        }
+    }
     else if (data.user?.identities?.length === 0) setError('User with this email already exists but is unconfirmed.');
     else setMessage('Confirmation link sent! Please check your email.');
     setLoading(false);

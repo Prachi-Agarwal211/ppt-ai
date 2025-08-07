@@ -22,6 +22,14 @@ const PresentationView = dynamic(() => import('./components/PresentationView').t
   loading: () => <div className="flex h-full w-full items-center justify-center text-white">Loading Presentation...</div>,
 });
 
+const viewComponents = {
+    idea: IdeaView,
+    outline: OutlineView,
+    deck: DeckView,
+    design: DesignView,
+    present: PresentationView,
+};
+
 export default function DashboardPage() {
     const router = useRouter();
     const supabase = createClient();
@@ -63,21 +71,12 @@ export default function DashboardPage() {
     
     // This function now handles rendering for all main content views.
     const renderMainView = () => {
-        switch (view) {
-            case 'idea':
-                return <IdeaView onPresentationStarted={() => setView('outline')} />;
-            case 'outline':
-                return <OutlineView onProceed={() => setView('deck')} />;
-            case 'deck':
-                return <DeckView />;
-            case 'design':
-                return <DesignView />;
-            case 'present':
-                return <PresentationView />;
-            default:
-                // Default to the idea view if something goes wrong.
-                return <IdeaView onPresentationStarted={() => setView('outline')} />;
-        }
+        const Component = viewComponents[view] || IdeaView;
+        const props = {
+            onPresentationStarted: () => setView('outline'),
+            onProceed: () => setView('deck'),
+        };
+        return <Component {...props} />;
     };
     
     const renderRightPanel = () => {
