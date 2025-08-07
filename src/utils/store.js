@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { produce } from 'immer';
 import { createClient } from './supabase/client';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
@@ -201,44 +202,38 @@ export const usePresentationStore = create(
             addMessage: (message) => set(state => ({ messages: [...state.messages, message] })),
             
             updateElementTransform: (slideId, elementId, newPosition, newSize) => {
-                set(state => ({
-                    slides: state.slides.map(slide => {
-                        if (slide.id === slideId) {
-                            const newElements = slide.elements.map(el => el.id === elementId ? { ...el, position: newPosition, size: newSize } : el);
-                            updateSlideInDB(slide.id, { elements: newElements });
-                            return { ...slide, elements: newElements };
-                        }
-                        return slide;
-                    })
+                set(state => produce(state, draft => {
+                    const slide = draft.slides.find(s => s.id === slideId);
+                    if (!slide) return;
+                    const el = slide.elements.find(e => e.id === elementId);
+                    if (!el) return;
+                    el.position = newPosition;
+                    el.size = newSize;
+                    updateSlideInDB(slideId, { elements: slide.elements });
                 }));
             },
 
             updateElementContent: (slideId, elementId, newContent) => {
-                set(state => ({
-                    slides: state.slides.map(slide => {
-                        if (slide.id === slideId) {
-                            const newElements = slide.elements.map(el => el.id === elementId ? { ...el, content: newContent } : el);
-                            updateSlideInDB(slide.id, { elements: newElements });
-                            return { ...slide, elements: newElements };
-                        }
-                        return slide;
-                    })
+                set(state => produce(state, draft => {
+                    const slide = draft.slides.find(s => s.id === slideId);
+                    if (!slide) return;
+                    const el = slide.elements.find(e => e.id === elementId);
+                    if (!el) return;
+                    el.content = newContent;
+                    updateSlideInDB(slideId, { elements: slide.elements });
                 }));
             },
             
             updateSlideNotes: (slideId, notes) => {
-                set(state => ({
-                    slides: state.slides.map(s => {
-                        if (s.id === slideId) {
-                            updateSlideInDB(slide.id, { notes: notes });
-                            return { ...s, notes: notes };
-                        }
-                        return s;
-                    })
+                set(state => produce(state, draft => {
+                    const slide = draft.slides.find(s => s.id === slideId);
+                    if (!slide) return;
+                    slide.notes = notes;
+                    updateSlideInDB(slideId, { notes });
                 }));
             },
 
-            addSlide: () => {
+            addSlide: async () => {
                 const newSlide = {
                     id: `new-${uuidv4()}`,
                     elements: [
@@ -249,6 +244,28 @@ export const usePresentationStore = create(
                     notes: '', order: get().slides.length + 1, presentation_id: get().presentationId, image_url: null
                 };
                 set(state => ({ slides: [...state.slides, newSlide], activeSlideId: newSlide.id, currentSlideIndex: state.slides.length }));
+                const presentationId = get().presentationId;
+                if (presentationId) {
+                    try {
+                        const supabase = createClient();
+                        const { data, error } = await supabase.from('slides').insert({
+                            presentation_id: presentationId,
+                            order: newSlide.order,
+                            elements: newSlide.elements,
+                            notes: newSlide.notes,
+                            image_url: newSlide.image_url,
+                        }).select('id').single();
+                        if (!error && data?.id) {
+                            set(state => produce(state, draft => {
+                                const idx = draft.slides.findIndex(s => s.id === newSlide.id);
+                                if (idx !== -1) draft.slides[idx].id = data.id;
+                                if (draft.activeSlideId === newSlide.id) draft.activeSlideId = data.id;
+                            }));
+                        }
+                    } catch (e) {
+                        console.error('Failed to persist new slide', e);
+                    }
+                }
                 toast.success("New slide added!");
             },
             
@@ -276,12 +293,11 @@ export const usePresentationStore = create(
             },
             
             reorderSlides: (startIndex, endIndex) => {
-                const slides = Array.from(get().slides);
-                const [removed] = slides.splice(startIndex, 1);
-                slides.splice(endIndex, 0, removed);
-                const updatedSlides = slides.map((s, index) => ({ ...s, order: index + 1 }));
-                set({ slides: updatedSlides });
-                updatedSlides.forEach(slide => updateSlideInDB(slide.id, { order: slide.order }));
+                set(state => produce(state, draft => {
+                    const [removed] = draft.slides.splice(startIndex, 1);
+                    draft.slides.splice(endIndex, 0, removed);
+                    draft.slides.forEach((s, idx) => { s.order = idx + 1; updateSlideInDB(s.id, { order: s.order }); });
+                }));
                 toast.success("Outline reordered.");
             },
             
@@ -311,10 +327,18 @@ export const usePresentationStore = create(
                 set({ loadingStatus: 'idle' });
                 return success;
             },
+
+            // expose for OutlineView debounced save hook
+            updateSlideInDB,
         }),
         {
             name: 'presentation-storage',
             storage: createJSONStorage(() => localStorage),
+            version: 2,
+            migrate: (persistedState, version) => {
+                // simple forward-compatible migration
+                return persistedState;
+            }
         }
     )
 );

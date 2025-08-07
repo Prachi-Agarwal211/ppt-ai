@@ -269,7 +269,7 @@ export default function NetherAISignIn() {
               </motion.button>
             </motion.div>
             <p className="text-center text-sm text-gray-400 mt-6">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <button onClick={() => setView('signUp')} className="font-medium text-peachSoft hover:text-white transition-colors">
                 Sign Up
               </button>

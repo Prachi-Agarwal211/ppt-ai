@@ -1,4 +1,5 @@
-import pptxgen from "pptxgenjs";
+let pptxgen;
+import toast from 'react-hot-toast';
 import { getElement } from './store'; // Import our shared helper function
 
 /**
@@ -6,13 +7,31 @@ import { getElement } from './store'; // Import our shared helper function
  * This function is updated to be more robust and handle potentially missing data.
  * @param {Array} slides - The array of slide objects from the Zustand store.
  */
+async function validateImage(url) {
+    try {
+        const res = await fetch(url, { method: 'HEAD' });
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
 export async function generatePptx(slides) {
+    throw new Error('generatePptx disabled in production build due to node:fs bundling. Re-enable with server-side export or dynamic route.');
+}
+
+// Legacy client-side export kept for reference; not used in production build
+export async function legacyGeneratePptx(slides) {
     if (!slides || slides.length === 0) {
         // Use a more user-friendly notification system if available, otherwise alert.
         toast.error("No slides available to generate a presentation.");
         return;
     }
 
+    if (!pptxgen) {
+        const mod = await import('pptxgenjs');
+        pptxgen = mod.default || mod;
+    }
     let pres = new pptxgen();
 
     // --- FIX: Safely get the presentation title from the first slide ---
@@ -59,7 +78,7 @@ export async function generatePptx(slides) {
         }
 
         // Add image only if a valid URL exists for the slide
-        if (slideData.image_url) {
+        if (slideData.image_url && await validateImage(slideData.image_url)) {
             // Use the image suggestion element's layout if available, otherwise use a sensible fallback.
             const imageLayout = imageSuggestionElement || { position: { x: 25, y: 25 }, size: { width: 50, height: 50 } };
             slide.addImage({
@@ -69,6 +88,18 @@ export async function generatePptx(slides) {
                 w: `${imageLayout.size?.width || 50}%`,
                 h: `${imageLayout.size?.height || 50}%`
             });
+        } else if (getElement(slideData, 'title')) {
+            // Fallback: add a subtle placeholder box if no image
+            const t = getElement(slideData, 'title');
+            slide.addText('Image pending', {
+                x: `${(t.position?.x || 5)}%`,
+                y: `${(t.position?.y || 10) + 18}%`,
+                w: `${(t.size?.width || 90)}%`,
+                h: `10%`,
+                fontSize: 14,
+                color: '888888',
+                align: 'center',
+              });
         }
     }
 

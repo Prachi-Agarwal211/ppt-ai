@@ -1,7 +1,7 @@
 'use client';
 import { motion } from 'framer-motion';
 import { FiCpu, FiEdit, FiLayout, FiPlay, FiShare2, FiDownload, FiLogOut, FiPlusCircle } from 'react-icons/fi';
-import { generatePptx } from '@/utils/downloader';
+import toast from 'react-hot-toast';
 import { usePresentationStore } from '@/utils/store';
 
 export const Header = ({ view, setView, onShare, onPresent, onLogout }) => {
@@ -11,9 +11,28 @@ export const Header = ({ view, setView, onShare, onPresent, onLogout }) => {
     const startNewPresentation = usePresentationStore(state => state.startNewPresentation);
     const slidesExist = slides.length > 0;
 
-    const handleDownload = () => {
-        if (slidesExist) {
-            generatePptx(slides);
+    const handleDownload = async () => {
+        if (!slidesExist) return;
+        const toastId = toast.loading('Preparing export...');
+        try {
+            const res = await fetch('/api/export-pptx', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slides })
+            });
+            if (!res.ok) throw new Error('Export failed');
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'Nether_AI_Presentation.pptx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success('Export ready!', { id: toastId });
+        } catch (e) {
+            toast.error(e.message || 'Export failed', { id: toastId });
         }
     };
     

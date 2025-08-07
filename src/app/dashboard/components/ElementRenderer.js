@@ -2,6 +2,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import DOMPurify from 'isomorphic-dompurify';
 
 /**
  * A shared component to render different types of slide elements.
@@ -31,7 +32,7 @@ export const ElementRenderer = ({ element, theme = {} }) => {
             );
             
         case 'diagram':
-             return <div className="w-full h-full bg-white rounded-md p-2 overflow-auto" dangerouslySetInnerHTML={{ __html: element.content }} />;
+             return <div className="w-full h-full bg-white rounded-md p-2 overflow-auto" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(element.content) }} />;
              
         default:
             return null;

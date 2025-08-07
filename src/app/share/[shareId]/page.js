@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { SharePresentationClient } from './SharePresentationClient';
+import Link from 'next/link';
 
 // This is a SERVER COMPONENT. It runs on the server to securely fetch data.
 export default async function SharePage({ params }) {
@@ -68,7 +69,7 @@ export default async function SharePage({ params }) {
             <SharePresentationClient slides={slides} presentation={presentationData} />
             
             <footer className="mt-4 text-gray-500 text-sm">
-                Powered by <a href="/" className="font-semibold text-gray-400 hover:text-white transition-colors">Nether AI</a>
+                Powered by <Link href="/" className="font-semibold text-gray-400 hover:text-white transition-colors">Nether AI</Link>
             </footer>
         </main>
     );

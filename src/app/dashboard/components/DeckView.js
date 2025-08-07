@@ -114,7 +114,14 @@ const DeckView = () => {
                 style={containerStyle}
                 className="w-full aspect-video bg-black/20 rounded-xl border border-white/10 shadow-lg transition-all duration-500 relative"
             >
-                {activeSlide.image_url && <img src={activeSlide.image_url} alt={imageSuggestionElement?.content || ''} className="absolute w-full h-full top-0 left-0 object-cover rounded-xl -z-10" />}
+                {activeSlide.image_url && (
+                  <img
+                    src={`/api/proxy-image?url=${encodeURIComponent(activeSlide.image_url)}`}
+                    crossOrigin="anonymous"
+                    alt={imageSuggestionElement?.content || ''}
+                    className="absolute w-full h-full top-0 left-0 object-cover rounded-xl -z-10"
+                  />
+                )}
                 {/* --- FIX: Conditionally render elements only when container size is known --- */}
                 {containerSize.width > 0 && activeSlide.elements.map(el => {
                     if (el.type === 'image_suggestion') return null;

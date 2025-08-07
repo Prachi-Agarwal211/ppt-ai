@@ -37,7 +37,7 @@ export const OutlineView = ({ setView }) => {
             <div className="flex h-full w-full flex-col items-center justify-center text-gray-500">
                 <FiEdit2 className="mb-4 text-4xl" />
                 <h3 className="text-xl font-semibold text-gray-300">Select a Slide to Edit</h3>
-                <p>Choose a slide from the left to review and enhance the AI's plan.</p>
+                <p>Choose a slide from the left to review and enhance the AI&apos;s plan.</p>
             </div>
         );
     }
