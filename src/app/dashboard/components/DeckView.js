@@ -48,6 +48,7 @@ const DeckView = () => {
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
     const [isEditMode, setIsEditMode] = useState(false);
 
+    // --- FIX: Select state individually to prevent unnecessary re-renders ---
     const slides = usePresentationStore(state => state.slides);
     const activeSlideId = usePresentationStore(state => state.activeSlideId);
     const theme = usePresentationStore(state => state.theme);
@@ -61,34 +62,38 @@ const DeckView = () => {
 
     const activeSlide = useMemo(() => slides.find(s => s.id === activeSlideId), [slides, activeSlideId]);
     
-    // Effect to update size, now runs on mount and when the active slide changes
+    // --- FIX: Consolidate size measurement into a single, reliable useEffect hook using ResizeObserver ---
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
-                setContainerSize({ width: containerRef.current.offsetWidth, height: containerRef.current.offsetHeight });
+                setContainerSize({ 
+                    width: containerRef.current.offsetWidth, 
+                    height: containerRef.current.offsetHeight 
+                });
             }
         };
-        updateSize(); // Initial call
-    }, [activeSlide]); // Recalculate size if slide content might change aspect ratio (future-proof)
 
-    // Effect for resize listener, runs only once on mount
-    useEffect(() => {
-        const updateSize = () => {
-            if (containerRef.current) {
-                setContainerSize({ width: containerRef.current.offsetWidth, height: containerRef.current.offsetHeight });
+        const observer = new ResizeObserver(updateSize);
+        const currentRef = containerRef.current;
+
+        if (currentRef) {
+            observer.observe(currentRef);
+            updateSize(); // Initial measurement
+        }
+
+        return () => {
+            if (currentRef) {
+                observer.unobserve(currentRef);
             }
         };
-        window.addEventListener('resize', updateSize);
-        return () => window.removeEventListener('resize', updateSize);
-    }, []); // Empty dependency array
-
+    }, [activeSlide]); // Re-run when the active slide changes to ensure we observe the correct element
 
     if (!activeSlide) {
         return (
             <div className="flex h-full w-full flex-col items-center justify-center text-gray-500">
                 <FiLayout className="mb-4 text-4xl" />
                 <h3 className="text-xl font-semibold text-gray-300">Deck View</h3>
-                <p>Select a slide from the left to view and edit it here.</p>
+                <p>Select a slide from the left to view and edit its layout.</p>
             </div>
         );
     }
@@ -110,7 +115,8 @@ const DeckView = () => {
                 className="w-full aspect-video bg-black/20 rounded-xl border border-white/10 shadow-lg transition-all duration-500 relative"
             >
                 {activeSlide.image_url && <img src={activeSlide.image_url} alt={imageSuggestionElement?.content || ''} className="absolute w-full h-full top-0 left-0 object-cover rounded-xl -z-10" />}
-                {activeSlide.elements.map(el => {
+                {/* --- FIX: Conditionally render elements only when container size is known --- */}
+                {containerSize.width > 0 && activeSlide.elements.map(el => {
                     if (el.type === 'image_suggestion') return null;
                     return isEditMode ? (
                         <EditableElement key={el.id} element={el} slideId={activeSlide.id} containerSize={containerSize} />
