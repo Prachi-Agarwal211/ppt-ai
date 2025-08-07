@@ -24,7 +24,7 @@ const ShareElementRenderer = ({ element, theme }) => {
                         ))}
                     </ul>
                 );
-            // Diagrams on the share page are also just SVGs.
+            // --- FIX: This case was missing, causing diagrams not to render on the public page. ---
             case 'diagram':
                  return <div className="w-full h-full bg-white rounded-md p-2 overflow-auto" dangerouslySetInnerHTML={{ __html: element.content }} />;
             default:

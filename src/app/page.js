@@ -157,11 +157,13 @@ export default function NetherAISignIn() {
     <motion.div variants={itemVariants} className="relative">
       <input
         id={id} name={id} type={type} value={value} onChange={handleInputChange} required={required} placeholder=" "
-        className="block w-full appearance-none rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-white placeholder-transparent transition-colors duration-300 peer focus:border-peachSoft focus:outline-none focus:ring-1 focus:ring-peachSoft"
+        // --- FIX: Add a specific class for date inputs for styling ---
+        className={`block w-full appearance-none rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-white placeholder-transparent transition-colors duration-300 peer focus:border-peachSoft focus:outline-none focus:ring-1 focus:ring-peachSoft ${type === 'date' ? 'date-input' : ''}`}
       />
       <label
         htmlFor={id}
-        className="absolute top-3.5 left-4 text-gray-400 transition-all duration-300 pointer-events-none peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-base peer-focus:-top-2.5 peer-focus:left-3 peer-focus:text-xs peer-focus:text-peachSoft peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:left-3 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-peachSoft bg-transparent px-1"
+        // --- FIX: Added peer-[:valid] to handle the floating label for date inputs which have a value but not a placeholder ---
+        className="absolute top-3.5 left-4 text-gray-400 transition-all duration-300 pointer-events-none peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-base peer-focus:-top-2.5 peer-focus:left-3 peer-focus:text-xs peer-focus:text-peachSoft peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:left-3 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-peachSoft peer-[:valid]:-top-2.5 peer-[:valid]:left-3 peer-[:valid]:text-xs peer-[:valid]:text-peachSoft bg-transparent px-1"
       >
         {placeholder}
       </label>
@@ -204,7 +206,7 @@ export default function NetherAISignIn() {
               {renderInput('username', 'text', 'Username', formState.username)}
               {renderInput('email', 'email', 'Email Address', formState.email)}
               {renderInput('phone', 'tel', 'Phone Number', formState.phone, false)}
-              {renderInput('dob', 'date', 'Date of Birth', formState.dob)}
+              {renderInput('dob', 'date', 'Date of Birth', formState.dob, true)}
               {renderPasswordInput('password', 'Password', formState.password)}
               <motion.div variants={itemVariants}>
                 <motion.button type="submit" disabled={loading} className="primary-button w-full justify-center">

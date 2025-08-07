@@ -102,3 +102,20 @@
   background-color: rgba(255, 255, 255, 0.2);
   color: white;
 }
+
+/* --- FIX: Styles to make the date input consistent with other inputs --- */
+.date-input {
+    color-scheme: dark; /* Helps with native calendar theme */
+}
+/* When the date is not set, the text color is the placeholder color */
+.date-input:invalid {
+    color: #9ca3af; /* Equivalent to text-gray-400 */
+}
+/* When a date is selected, the text color is white */
+.date-input:valid {
+    color: #ffffff;
+}
+/* Hide the default calendar icon */
+.date-input::-webkit-calendar-picker-indicator {
+    display: none;
+}

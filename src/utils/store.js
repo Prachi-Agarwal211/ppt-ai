@@ -22,6 +22,44 @@ const updateSlideInDB = async (slideId, slideData) => {
     }
 };
 
+/**
+ * Internal helper to fetch and set presentation data. Centralizes the loading logic.
+ * @param {string} id - The presentation ID to load.
+ * @param {Function} set - The Zustand set function.
+ * @returns {Promise<{success: boolean, data: object|null}>}
+ */
+const _fetchAndSetPresentation = async (id, set) => {
+    try {
+        const [presentationRes, slidesRes] = await Promise.all([
+            createClient().from('presentations').select('*').eq('id', id).single(),
+            createClient().from('slides').select('id, elements, notes, order, image_url, presentation_id').eq('presentation_id', id).order('order', { ascending: true })
+        ]);
+
+        if (slidesRes.error || presentationRes.error) {
+            throw slidesRes.error || presentationRes.error;
+        }
+
+        set({
+            slides: slidesRes.data,
+            presentationId: presentationRes.data.id,
+            activeSlideId: slidesRes.data[0]?.id || null,
+            currentSlideIndex: 0,
+            theme: { 
+                bg_css: presentationRes.data.theme_bg_css, 
+                primary_color: presentationRes.data.theme_primary_color, 
+                secondary_color: presentationRes.data.theme_secondary_color, 
+                accent_color: presentationRes.data.theme_accent_color 
+            },
+        });
+        return { success: true, data: presentationRes.data };
+    } catch (err) {
+        set({ generationError: 'Failed to load presentation.', isGenerating: false });
+        console.error("Error loading presentation data:", err);
+        return { success: false, error: err };
+    }
+};
+
+
 export const usePresentationStore = create(
     persist(
         (set, get) => ({
@@ -54,7 +92,7 @@ export const usePresentationStore = create(
 
             // --- THE "SUPERBOSS" AI ACTION ---
             sendCommand: async (command) => {
-                const { activeSlideId, slides, presentationId, addMessage, loadPresentation } = get();
+                const { activeSlideId, slides, presentationId, addMessage, fetchHistory } = get();
 
                 if (!activeSlideId && ['generate_diagram', 'generate_image', 'interpret_chat'].includes(command.task)) {
                     toast.error("Please select a slide first.");
@@ -104,9 +142,15 @@ export const usePresentationStore = create(
                     const result = await response.json();
 
                     switch (result.type) {
+                        // --- FIX: THIS IS THE CRITICAL WORKFLOW FIX ---
                         case 'presentation_started':
-                            await loadPresentation(result.presentationId);
-                            toast.success("Presentation generated successfully!");
+                            const { success } = await _fetchAndSetPresentation(result.presentationId, set);
+                            if (success) {
+                                toast.success("Presentation generated successfully!");
+                                await fetchHistory(); // Refresh the history list
+                            } else {
+                                toast.error("Could not load the new presentation.");
+                            }
                             return true;
                         
                         case 'diagram':
@@ -248,31 +292,17 @@ export const usePresentationStore = create(
 
             loadPresentation: async (id) => {
                 set({ isGenerating: true, generationError: null, slides: [], activeSlideId: null, presentationId: null, theme: {}, messages: [] }); 
-                const promise = Promise.all([
-                    createClient().from('presentations').select('*').eq('id', id).single(),
-                    createClient().from('slides').select('id, elements, notes, order, image_url, presentation_id').eq('presentation_id', id).order('order', { ascending: true })
-                ]);
-                toast.promise(promise, {
-                    loading: 'Loading presentation...',
-                    success: (results) => {
-                        const [presentationRes, slidesRes] = results;
-                         if (slidesRes.error || presentationRes.error) throw slidesRes.error || presentationRes.error;
-                        set({
-                            slides: slidesRes.data,
-                            presentationId: presentationRes.data.id,
-                            activeSlideId: slidesRes.data[0]?.id || null,
-                            currentSlideIndex: 0,
-                            theme: { bg_css: presentationRes.data.theme_bg_css, primary_color: presentationRes.data.theme_primary_color, secondary_color: presentationRes.data.theme_secondary_color, accent_color: presentationRes.data.theme_accent_color },
-                            isGenerating: false 
-                        });
-                        return `Loaded "${presentationRes.data.title}"`;
-                    },
-                    error: (err) => {
-                        set({ generationError: 'Failed to load presentation.', isGenerating: false });
-                        return `Error: ${err.message}`;
-                    }
-                });
-                return promise.then(() => true).catch(() => false);
+                const toastId = toast.loading('Loading presentation...');
+                
+                const { success, data, error } = await _fetchAndSetPresentation(id, set);
+
+                if (success) {
+                    toast.success(`Loaded "${data.title}"`, { id: toastId });
+                } else {
+                    toast.error(`Error: ${error.message}`, { id: toastId });
+                }
+                set({ isGenerating: false });
+                return success;
             },
         }),
         {
