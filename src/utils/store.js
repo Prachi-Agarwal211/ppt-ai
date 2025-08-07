@@ -53,7 +53,7 @@ const _fetchAndSetPresentation = async (id, set) => {
         });
         return { success: true, data: presentationRes.data };
     } catch (err) {
-        set({ generationError: 'Failed to load presentation.', isGenerating: false });
+        set({ generationError: 'Failed to load presentation.', loadingStatus: 'idle' });
         console.error("Error loading presentation data:", err);
         return { success: false, error: err };
     }
@@ -74,10 +74,10 @@ export const usePresentationStore = create(
             currentSlideIndex: 0,
             isAssistantProcessing: false, // For all other AI tasks (diagrams, themes, etc.)
             messages: [], // Centralized chat history for the AI Assistant
+            loadingStatus: 'idle', // 'idle', 'generating-presentation', 'loading-presentation'
             
             theme: { bg_css: null, primary_color: null, secondary_color: null, accent_color: null },
             
-            // --- FIX: Add a new action to reset the presentation state ---
             startNewPresentation: () => {
                 set({
                     slides: [],
@@ -87,6 +87,7 @@ export const usePresentationStore = create(
                     messages: [],
                     theme: { bg_css: null, primary_color: null, secondary_color: null, accent_color: null },
                     generationError: null,
+                    loadingStatus: 'idle',
                 });
             },
 
@@ -105,6 +106,9 @@ export const usePresentationStore = create(
                 
                 const isLoadingState = command.task === 'generate_presentation' ? 'isGenerating' : 'isAssistantProcessing';
                 set({ [isLoadingState]: true, generationError: null });
+                if (command.task === 'generate_presentation') {
+                    set({ loadingStatus: 'generating-presentation' });
+                }
 
                 const activeSlide = slides.find(s => s.id === activeSlideId);
                 
@@ -142,12 +146,11 @@ export const usePresentationStore = create(
                     const result = await response.json();
 
                     switch (result.type) {
-                        // --- FIX: THIS IS THE CRITICAL WORKFLOW FIX ---
                         case 'presentation_started':
                             const { success } = await _fetchAndSetPresentation(result.presentationId, set);
                             if (success) {
                                 toast.success("Presentation generated successfully!");
-                                await fetchHistory(); // Refresh the history list
+                                await fetchHistory();
                             } else {
                                 toast.error("Could not load the new presentation.");
                             }
@@ -182,13 +185,13 @@ export const usePresentationStore = create(
                     }
                 } catch (error) {
                     console.error("AI Command failed:", error);
-                    const errorMessage = error.message || "An unknown error occurred.";
+                    const errorMessage = error.message || "An unknown error occurred. Check the server logs.";
                     set({ generationError: errorMessage });
                     toast.error(errorMessage);
                     addMessage({ role: 'ai', content: `Sorry, an error occurred: ${errorMessage}` });
                     return false;
                 } finally {
-                    set({ [isLoadingState]: false });
+                    set({ [isLoadingState]: false, loadingStatus: 'idle' });
                 }
                 return true;
             },
@@ -291,7 +294,11 @@ export const usePresentationStore = create(
             },
 
             loadPresentation: async (id) => {
-                set({ isGenerating: true, generationError: null, slides: [], activeSlideId: null, presentationId: null, theme: {}, messages: [] }); 
+                if (get().loadingStatus !== 'idle') {
+                    toast.error("Please wait for the current operation to complete.");
+                    return false;
+                }
+                set({ loadingStatus: 'loading-presentation', generationError: null, slides: [], activeSlideId: null, presentationId: null, theme: {}, messages: [] }); 
                 const toastId = toast.loading('Loading presentation...');
                 
                 const { success, data, error } = await _fetchAndSetPresentation(id, set);
@@ -301,7 +308,7 @@ export const usePresentationStore = create(
                 } else {
                     toast.error(`Error: ${error.message}`, { id: toastId });
                 }
-                set({ isGenerating: false });
+                set({ loadingStatus: 'idle' });
                 return success;
             },
         }),

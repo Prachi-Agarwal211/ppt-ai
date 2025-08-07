@@ -5,35 +5,26 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import { FiMove, FiEdit, FiCheck, FiLayout } from 'react-icons/fi';
 import { Rnd } from 'react-rnd';
 import { Toolbox } from '@/app/dashboard/components/Toolbox';
-
-const ElementRenderer = ({ element }) => {
-    switch (element.type) {
-        case 'title':
-            return <h2 className="text-4xl font-bold text-white w-full h-full p-2 overflow-hidden flex items-center justify-center text-center">{element.content}</h2>;
-        case 'content':
-            return <div className="text-xl text-gray-300 w-full h-full p-4 overflow-auto text-left">{Array.isArray(element.content) && element.content.map((point, i) => <p key={i}>• {point}</p>)}</div>;
-        case 'diagram':
-            return <div className="w-full h-full bg-white rounded-md p-2 overflow-auto" dangerouslySetInnerHTML={{ __html: element.content }} />;
-        default:
-            return null;
-    }
-};
+import { ElementRenderer } from './ElementRenderer'; // Import the shared renderer
 
 const EditableElement = ({ element, slideId, containerSize }) => {
-    // --- FIX: Selecting state individually. ---
     const updateElementTransform = usePresentationStore(state => state.updateElementTransform);
 
     if (!element || !containerSize.width) return null;
+
     const handleDragStop = (e, d) => {
         const newPosition = { x: (d.x / containerSize.width) * 100, y: (d.y / containerSize.height) * 100 };
         updateElementTransform(slideId, element.id, newPosition, element.size);
     };
+
     const handleResizeStop = (e, direction, ref, delta, position) => {
         const newSize = { width: (parseInt(ref.style.width, 10) / containerSize.width) * 100, height: (parseInt(ref.style.height, 10) / containerSize.height) * 100 };
         const newPosition = { x: (position.x / containerSize.width) * 100, y: (position.y / containerSize.height) * 100 };
         updateElementTransform(slideId, element.id, newPosition, newSize);
     };
+
     if (element.type === 'image_suggestion') return null;
+
     return (
         <Rnd
             size={{ width: `${element.size.width}%`, height: `${element.size.height}%` }}
@@ -57,7 +48,6 @@ const DeckView = () => {
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
     const [isEditMode, setIsEditMode] = useState(false);
 
-    // --- FIX: Selecting state individually. ---
     const slides = usePresentationStore(state => state.slides);
     const activeSlideId = usePresentationStore(state => state.activeSlideId);
     const theme = usePresentationStore(state => state.theme);
@@ -71,16 +61,27 @@ const DeckView = () => {
 
     const activeSlide = useMemo(() => slides.find(s => s.id === activeSlideId), [slides, activeSlideId]);
     
+    // Effect to update size, now runs on mount and when the active slide changes
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
                 setContainerSize({ width: containerRef.current.offsetWidth, height: containerRef.current.offsetHeight });
             }
         };
-        updateSize();
+        updateSize(); // Initial call
+    }, [activeSlide]); // Recalculate size if slide content might change aspect ratio (future-proof)
+
+    // Effect for resize listener, runs only once on mount
+    useEffect(() => {
+        const updateSize = () => {
+            if (containerRef.current) {
+                setContainerSize({ width: containerRef.current.offsetWidth, height: containerRef.current.offsetHeight });
+            }
+        };
         window.addEventListener('resize', updateSize);
         return () => window.removeEventListener('resize', updateSize);
-    }, [activeSlide]);
+    }, []); // Empty dependency array
+
 
     if (!activeSlide) {
         return (

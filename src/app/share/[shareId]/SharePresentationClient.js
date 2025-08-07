@@ -2,51 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiArrowLeft, FiArrowRight } from 'react-icons/fi';
-
-// A dedicated renderer for public-facing elements.
-const ShareElementRenderer = ({ element, theme }) => {
-    if (!element) return null;
-
-    const titleStyle = theme.primary_color ? { color: theme.primary_color } : {};
-
-    const renderContent = () => {
-        switch(element.type) {
-            case 'title':
-                return <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold" style={titleStyle}>{element.content}</h1>;
-            case 'content':
-                const points = Array.isArray(element.content) ? element.content : [];
-                return (
-                    <ul className="space-y-3 text-lg sm:text-xl md:text-2xl text-gray-300 text-left">
-                        {points.map((point, i) => (
-                            <motion.li key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.1 }}>
-                                • {point}
-                            </motion.li>
-                        ))}
-                    </ul>
-                );
-            // --- FIX: This case was missing, causing diagrams not to render on the public page. ---
-            case 'diagram':
-                 return <div className="w-full h-full bg-white rounded-md p-2 overflow-auto" dangerouslySetInnerHTML={{ __html: element.content }} />;
-            default:
-                return null;
-        }
-    };
-    
-    return (
-        <div 
-            style={{
-                position: 'absolute',
-                left: `${element.position.x}%`,
-                top: `${element.position.y}%`,
-                width: `${element.size.width}%`,
-                height: `${element.size.height}%`,
-            }}
-            className="flex flex-col justify-center"
-        >
-            {renderContent()}
-        </div>
-    );
-}
+import { ElementRenderer } from '@/app/dashboard/components/ElementRenderer'; // Use the shared renderer
 
 export const SharePresentationClient = ({ slides, presentation }) => {
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -100,7 +56,19 @@ export const SharePresentationClient = ({ slides, presentation }) => {
                              </div>
                         )}
                         {activeSlide.elements.map(el => (
-                            <ShareElementRenderer key={el.id} element={el} theme={presentation.theme} />
+                             <div 
+                                key={el.id}
+                                style={{
+                                    position: 'absolute',
+                                    left: `${el.position.x}%`,
+                                    top: `${el.position.y}%`,
+                                    width: `${el.size.width}%`,
+                                    height: `${el.size.height}%`,
+                                }}
+                                className="flex flex-col justify-center"
+                            >
+                               <ElementRenderer element={el} theme={presentation.theme} />
+                            </div>
                         ))}
                     </motion.div>
                 </AnimatePresence>
