@@ -116,6 +116,12 @@ const DeckView = () => {
                 style={containerStyle}
                 className="w-full aspect-video bg-black/20 rounded-xl border border-white/10 shadow-lg transition-all duration-500 relative"
             >
+                {/* Magic Menu */}
+                <div className="absolute top-3 right-3 z-20 flex gap-2">
+                  <button onClick={() => usePresentationStore.getState().sendCommand({ task: 'magic_edit', intent: 'summarize' })} className="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20">Summarize</button>
+                  <button onClick={() => usePresentationStore.getState().sendCommand({ task: 'magic_edit', intent: 'rephrase' })} className="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20">Rephrase</button>
+                  <button onClick={() => usePresentationStore.getState().sendCommand({ task: 'magic_edit', intent: 'fix_overflow', charBudget: 230 })} className="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20">Fix Overflow</button>
+                </div>
                 {activeSlide.image_url && (
                   <img
                     src={`/api/proxy-image?url=${encodeURIComponent(activeSlide.image_url)}`}
@@ -138,8 +144,8 @@ const DeckView = () => {
                     );
                   }
                   if (!(containerSize.width > 0)) return null;
-                  return activeSlide.elements.map(el => {
-                    if (el.type === 'image_suggestion' || el.type === 'ai_task' || el.type === 'generated_html') return null;
+return activeSlide.elements.map(el => {
+                    if (el.type === 'image_suggestion' || el.type === 'ai_task' || el.type === 'generated_html' || el.type === 'layout') return null;
                     return isEditMode ? (
                         <EditableElement key={el.id} element={el} slideId={activeSlide.id} containerSize={containerSize} />
                     ) : (

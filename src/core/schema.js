@@ -38,11 +38,18 @@ export const diagramElementSchema = object({
   size: sizeSchema,
 });
 
+export const layoutElementSchema = object({
+  id: string(),
+  type: literal('layout'),
+  layout: enums(['title-only','two-column','three-column','cards','image-left','image-right','full-bleed','diagram','quote'])
+});
+
 export const elementSchema = union([
   titleElementSchema,
   contentElementSchema,
   imageSuggestionSchema,
   diagramElementSchema,
+  layoutElementSchema,
 ]);
 
 export const slideSchema = object({
@@ -61,7 +68,7 @@ export const themeSchema = object({
   accent_color: optional(nullable(string())),
 });
 
-// AI Outputs
+// AI Outputs (existing)
 export const blueprintSchema = object({
   title: string(),
   slides: array(object({ slide_title: string(), visual_prompt: string() }))
@@ -85,6 +92,87 @@ export const themeOutputSchema = object({
 });
 
 export const interpretSchema = object({ task: enums(['generate_diagram','generate_theme','generate_image','clarify'])});
+
+// New Cognitive Core contracts (v1)
+export const presentationStrategySchema = object({
+  version: literal('1'),
+  goal: string(),
+  targetAudience: string(),
+  narrativeOutline: array(object({
+    slideId: string(),
+    titleHint: string(),
+    keyMessage: string(),
+    type: enums(['overview','comparison','process','data','quote','image','conclusion']),
+    notes: optional(string()),
+    dependencies: optional(array(string()))
+  })),
+  length: object({ slides: number() })
+});
+
+export const slideTextSchema = object({
+  version: literal('1'),
+  slideId: string(),
+  title: string(),
+  bullets: array(string()),
+  speakerNotes: string(),
+  charBudget: number(),
+  locale: optional(string())
+});
+
+export const layoutPlanSchema = object({
+  version: literal('1'),
+  slideId: string(),
+  layout: enums(['title-only','two-column','three-column','cards','image-left','image-right','full-bleed','diagram']),
+  components: array(object({
+    type: enums(['text','image','icon','svg','list','quote','chart']),
+    contentRef: string(),
+    position: object({ area: string() }),
+    styleHints: optional(object({
+      emphasis: optional(enums(['low','medium','high'])),
+      iconSet: optional(enums(['outline','filled'])),
+      density: optional(enums(['cozy','comfortable','compact']))
+    }))
+  })),
+  assets: optional(array(object({
+    assetId: string(),
+    kind: enums(['svg','image']),
+    source: enums(['inline','generated','uploaded']),
+    prompt: optional(string()),
+    svg: optional(string())
+  }))),
+  accessibility: optional(object({ contrastMin: number(), fontScale: optional(enums(['normal','large'])) }))
+});
+
+export const finalSlideSchema = object({
+  version: literal('1'),
+  slideId: string(),
+  html: string(),
+  themeId: optional(string()),
+  assets: optional(array(string())),
+  a11yScore: number()
+});
+
+export const themeTokensSchema = object({
+  version: literal('1'),
+  name: string(),
+  colors: object({
+    background: string(),
+    surface: string(),
+    primary: string(),
+    secondary: string(),
+    accent: string(),
+    textPrimary: string(),
+    textSecondary: string(),
+    muted: string(),
+  }),
+  fonts: object({
+    heading: object({ family: string(), weight: number() }),
+    body: object({ family: string(), weight: number() }),
+  }),
+  radii: object({ sm: number(), md: number(), lg: number() }),
+  shadows: object({ elev1: string(), elev2: string() }),
+  spacing: object({ xs: number(), sm: number(), md: number(), lg: number(), xl: number() })
+});
 
 // Utilities
 export const safeParseJSON = (text, schema) => {

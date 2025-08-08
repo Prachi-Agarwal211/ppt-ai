@@ -6,6 +6,16 @@ import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
+// Safely clone objects to avoid leaking Immer draft proxies into async code
+const deepClone = (obj) => {
+    try {
+        // Prefer structuredClone when available
+        return typeof structuredClone === 'function' ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
+    } catch {
+        return JSON.parse(JSON.stringify(obj));
+    }
+};
+
 // A shared helper function to find a specific element within a slide's elements array.
 export const getElement = (slide, type) => {
     if (!slide || !Array.isArray(slide.elements)) return undefined;
@@ -181,6 +191,11 @@ export const usePresentationStore = create(
                         case 'clarification':
                             addMessage({ role: 'ai', content: result.message });
                             break;
+                        case 'magic_edit':
+                            // Re-fetch current presentation to refresh updated slide HTML
+                            await _fetchAndSetPresentation(get().presentationId, set);
+                            toast.success('Applied edit');
+                            break;
                         
                         default:
                             throw new Error("Received an unknown result type from the AI.");
@@ -203,6 +218,7 @@ export const usePresentationStore = create(
             addMessage: (message) => set(state => ({ messages: [...state.messages, message] })),
             
             updateElementTransform: (slideId, elementId, newPosition, newSize) => {
+                let payload = null;
                 set(state => produce(state, draft => {
                     const slide = draft.slides.find(s => s.id === slideId);
                     if (!slide) return;
@@ -210,59 +226,70 @@ export const usePresentationStore = create(
                     if (!el) return;
                     el.position = newPosition;
                     el.size = newSize;
-                    updateSlideInDB(slideId, { elements: slide.elements });
+                    payload = { elements: deepClone(slide.elements) };
                 }));
+                if (payload) updateSlideInDB(slideId, payload);
             },
 
             updateElementContent: (slideId, elementId, newContent) => {
+                let payload = null;
                 set(state => produce(state, draft => {
                     const slide = draft.slides.find(s => s.id === slideId);
                     if (!slide) return;
                     const el = slide.elements.find(e => e.id === elementId);
                     if (!el) return;
                     el.content = newContent;
-                    updateSlideInDB(slideId, { elements: slide.elements });
+                    payload = { elements: deepClone(slide.elements) };
                 }));
+                if (payload) updateSlideInDB(slideId, payload);
             },
             
             // Queue an AI task on the slide (e.g., image, diagram, theme). Stored as a special element.
             addAiTask: (slideId, taskType, initialPrompt = '') => {
+                let payload = null;
                 set(state => produce(state, draft => {
                     const slide = draft.slides.find(s => s.id === slideId);
                     if (!slide) return;
                     const taskEl = { id: uuidv4(), type: 'ai_task', task: taskType, content: initialPrompt };
                     slide.elements.push(taskEl);
-                    updateSlideInDB(slideId, { elements: slide.elements });
+                    payload = { elements: deepClone(slide.elements) };
                 }));
+                if (payload) updateSlideInDB(slideId, payload);
             },
 
             updateAiTask: (slideId, taskId, newPrompt) => {
+                let payload = null;
                 set(state => produce(state, draft => {
                     const slide = draft.slides.find(s => s.id === slideId);
                     if (!slide) return;
                     const task = slide.elements.find(e => e.id === taskId && e.type === 'ai_task');
                     if (!task) return;
                     task.content = newPrompt;
-                    updateSlideInDB(slideId, { elements: slide.elements });
+                    payload = { elements: deepClone(slide.elements) };
                 }));
+                if (payload) updateSlideInDB(slideId, payload);
             },
 
             removeAiTask: (slideId, taskId) => {
+                let payload = null;
                 set(state => produce(state, draft => {
                     const slide = draft.slides.find(s => s.id === slideId);
                     if (!slide) return;
                     slide.elements = slide.elements.filter(e => e.id !== taskId);
-                    updateSlideInDB(slideId, { elements: slide.elements });
+                    payload = { elements: deepClone(slide.elements) };
                 }));
+                if (payload) updateSlideInDB(slideId, payload);
             },
             
             updateSlideNotes: (slideId, notes) => {
+                let payload = null;
                 set(state => produce(state, draft => {
                     const slide = draft.slides.find(s => s.id === slideId);
                     if (!slide) return;
                     slide.notes = notes;
-                    updateSlideInDB(slideId, { notes });
+                    payload = { notes };
                 }));
+                if (payload) updateSlideInDB(slideId, payload);
             },
 
             addSlide: async () => {
@@ -352,15 +379,14 @@ export const usePresentationStore = create(
             },
             
             reorderSlides: (startIndex, endIndex) => {
+                let updates = [];
                 set(state => produce(state, draft => {
                     const [removed] = draft.slides.splice(startIndex, 1);
                     draft.slides.splice(endIndex, 0, removed);
-                    draft.slides.forEach((s, idx) => { 
-                        s.order = idx + 1; 
-                        // keep DB's slide_number in sync with our order field
-                        updateSlideInDB(s.id, { order: s.order, slide_number: s.order }); 
-                    });
+                    updates = draft.slides.map((s, idx) => ({ id: s.id, order: idx + 1, slide_number: idx + 1 }));
                 }));
+                // Apply DB updates outside of produce
+                updates.forEach(u => updateSlideInDB(u.id, { order: u.order, slide_number: u.slide_number }));
                 toast.success("Outline reordered.");
             },
             

@@ -70,8 +70,8 @@ export const IdeaView = () => {
             }
             
             if (topic) {
-                await sendCommand({
-                    task: 'generate_presentation',
+await sendCommand({
+                    task: 'generate_presentation_cognitive',
                     topic: topic,
                     slideCount: Number(slideCount) || 7
                 });

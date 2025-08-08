@@ -81,6 +81,16 @@ export async function POST(request) {
             case 'generate_presentation':
                 result = await handleGeneratePresentation(context, user, supabaseAdmin);
                 break;
+            case 'generate_presentation_cognitive': {
+                const { runCognitivePipeline } = await import('@/core/cognitive/orchestrator');
+                result = await runCognitivePipeline(context, user, supabaseAdmin);
+                break;
+            }
+            case 'magic_edit': {
+                const { magicEdit } = await import('./magicEdit');
+                result = await magicEdit(context, supabaseAdmin);
+                break;
+            }
             case 'generate_diagram':
                 result = await generateDiagram(context, supabaseAdmin);
                 break;
