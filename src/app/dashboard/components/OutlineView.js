@@ -1,3 +1,5 @@
+// src/app/dashboard/components/OutlineView.js
+
 'use client'; 
 import { motion } from 'framer-motion';
 import { usePresentationStore, getElement } from '@/utils/store';
@@ -26,6 +28,9 @@ export const OutlineView = ({ setView }) => {
     const updateElementContent = usePresentationStore(state => state.updateElementContent);
     const updateSlideNotes = usePresentationStore(state => state.updateSlideNotes);
     const updateSlideInDB = usePresentationStore(state => state.updateSlideInDB);
+    const updateAiTask = usePresentationStore(state => state.updateAiTask);
+    const removeAiTask = usePresentationStore(state => state.removeAiTask);
+    const finalizePresentation = usePresentationStore(state => state.finalizePresentation);
 
     const slide = useMemo(() => slides.find(s => s.id === activeSlideId), [slides, activeSlideId]);
     const titleElement = useMemo(() => getElement(slide, 'title'), [slide]);
@@ -78,8 +83,28 @@ export const OutlineView = ({ setView }) => {
             </div>
             <div className="flex-shrink-0 mt-4 space-y-4">
                 <Toolbox />
-                <motion.button onClick={() => setView('deck')} className="primary-button w-full justify-center">
-                    <FiLayout className="mr-2" /> Finalize & View Deck
+
+                {/* AI Task Cards */}
+                <div className="space-y-2">
+                    {(slide.elements || []).filter(el => el.type === 'ai_task').map(task => (
+                        <div key={task.id} className="bg-white/5 border border-white/10 rounded-md p-2">
+                            <div className="text-xs text-gray-400 mb-1">AI Task: {task.task}</div>
+                            <textarea
+                                className="w-full bg-transparent text-sm p-2 border border-white/10 rounded"
+                                rows={3}
+                                value={task.content || ''}
+                                onChange={(e) => updateAiTask(slide.id, task.id, e.target.value)}
+                                placeholder="Describe what you want the AI to generate..."
+                            />
+                            <div className="flex justify-end mt-2">
+                                <button onClick={() => removeAiTask(slide.id, task.id)} className="text-xs text-red-300 hover:text-red-200">Remove</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <motion.button onClick={finalizePresentation} className="primary-button w-full justify-center">
+                    <FiLayout className="mr-2" /> Generate & View Deck
                 </motion.button>
             </div>
         </motion.div>

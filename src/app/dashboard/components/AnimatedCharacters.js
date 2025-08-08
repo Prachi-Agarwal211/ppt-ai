@@ -1,3 +1,5 @@
+// src/app/dashboard/components/AnimatedCharacters.js
+
 'use client';
 import { motion } from 'framer-motion';
 

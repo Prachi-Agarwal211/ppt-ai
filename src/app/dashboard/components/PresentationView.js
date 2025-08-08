@@ -1,3 +1,5 @@
+// src/app/dashboard/components/PresentationView.js
+
 'use client';
 import React from 'react';
 import { usePresentationStore, getElement } from '@/utils/store';

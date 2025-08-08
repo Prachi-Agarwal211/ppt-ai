@@ -1,8 +1,9 @@
+// src/app/dashboard/components/IdeaView.js
+
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiCpu, FiType, FiLink, FiUploadCloud, FiLoader, FiInbox } from 'react-icons/fi';
-import mammoth from 'mammoth';
 import { AnimatedCharacters } from './AnimatedCharacters';
 import toast from 'react-hot-toast';
 import { usePresentationStore } from '@/utils/store';
@@ -47,18 +48,24 @@ export const IdeaView = () => {
             if (inputMode === 'text' && text.trim()) {
                 topic = text;
             } else if (inputMode === 'link' && link.trim()) {
-                topic = `A presentation based on the content at this link: ${link}`;
+                toastId = toast.loading('Fetching link content...');
+                const res = await fetch('/api/extract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: link.trim() })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to fetch link');
+                topic = data.text;
+                toast.success('Link content fetched!', { id: toastId });
             } else if (inputMode === 'file' && file) {
                 toastId = toast.loading('Reading file...');
-                if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-                    const arrayBuffer = await file.arrayBuffer();
-                    const result = await mammoth.extractRawText({ arrayBuffer });
-                    topic = result.value;
-                } else if (file.type.startsWith('text/')) {
-                    topic = await file.text();
-                } else {
-                    throw new Error(`Unsupported file type: ${file.type}. Please use .docx, .txt, or .md files.`);
-                }
+                const form = new FormData();
+                form.append('file', file);
+                const res = await fetch('/api/extract', { method: 'POST', body: form });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to read file');
+                topic = data.text;
                 toast.success('File read successfully!', { id: toastId });
             }
             
@@ -80,7 +87,7 @@ export const IdeaView = () => {
     const handleSlideCountChange = (e) => {
         const value = e.target.value;
         const num = parseInt(value, 10);
-        setSlideCount(isNaN(num) ? '' : num);
+        setSlideCount(isNaN(num) ? 7 : num);
     };
 
     const handleFileChange = (e) => {
@@ -111,14 +118,15 @@ export const IdeaView = () => {
                   {inputMode === 'link' && ( <motion.input key="link" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://example.com/article" className="w-full bg-white/5 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-peachSoft" /> )}
                   {inputMode === 'file' && ( <motion.div key="file" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}}> 
                     <label htmlFor="file-upload" className="w-full flex flex-col items-center justify-center bg-white/5 rounded-lg p-6 border-2 border-dashed border-white/20 cursor-pointer hover:bg-white/10"> 
-                        {file ? <p className="text-peachSoft">{file.name}</p> : <><FiUploadCloud className="text-3xl mb-2" /><p>Click to upload (.docx, .txt, .md)</p></>} 
+                        {file ? <p className="text-peachSoft">{file.name}</p> : <><FiUploadCloud className="text-3xl mb-2" /><p>Click to upload (.pdf, .docx, .txt, .md)</p></>} 
                     </label> 
-                    <input id="file-upload" ref={fileInputRef} type="file" className="sr-only" accept=".docx,.txt,.md,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleFileChange} /> 
+                    <input id="file-upload" ref={fileInputRef} type="file" className="sr-only" accept=".pdf,.docx,.txt,.md,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleFileChange} /> 
                   </motion.div> )}
                 </AnimatePresence>
                 <div className="mt-4">
                   <label htmlFor="slide-count" className="block text-sm font-medium text-gray-300 mb-2">Number of Slides</label>
-                  <input type="number" id="slide-count" name="slide-count" value={slideCount} onChange={handleSlideCountChange} min="3" max="15" className="w-full bg-white/5 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-peachSoft"/>
+                  <input type="range" id="slide-count" name="slide-count" value={slideCount} onChange={handleSlideCountChange} min="3" max="15" className="w-full"/>
+                  <div className="text-xs text-gray-400 mt-1">{slideCount} slides</div>
                 </div>
                 <button type="submit" disabled={isGenerating} className="primary-button w-full justify-center mt-4"> 
                   {isGenerating ? <><FiLoader className="mr-2 animate-spin" /> Generating...</> : <><FiCpu className="mr-2" /> Generate Presentation</>} 

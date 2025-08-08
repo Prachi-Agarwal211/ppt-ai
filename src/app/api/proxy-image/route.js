@@ -1,3 +1,6 @@
+
+// src/app/api/proxy-image/route.js
+
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -18,4 +21,3 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Proxy failed' }, { status: 502 });
   }
 }
-

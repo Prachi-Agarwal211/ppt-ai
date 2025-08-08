@@ -1,3 +1,5 @@
+// src/app/dashboard/components/AIChatSidebar.js
+
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { usePresentationStore } from '@/utils/store';

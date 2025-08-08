@@ -1,3 +1,4 @@
+// src/utils/store.js
 import { create } from 'zustand';
 import { produce } from 'immer';
 import { createClient } from './supabase/client';
@@ -224,6 +225,37 @@ export const usePresentationStore = create(
                 }));
             },
             
+            // Queue an AI task on the slide (e.g., image, diagram, theme). Stored as a special element.
+            addAiTask: (slideId, taskType, initialPrompt = '') => {
+                set(state => produce(state, draft => {
+                    const slide = draft.slides.find(s => s.id === slideId);
+                    if (!slide) return;
+                    const taskEl = { id: uuidv4(), type: 'ai_task', task: taskType, content: initialPrompt };
+                    slide.elements.push(taskEl);
+                    updateSlideInDB(slideId, { elements: slide.elements });
+                }));
+            },
+
+            updateAiTask: (slideId, taskId, newPrompt) => {
+                set(state => produce(state, draft => {
+                    const slide = draft.slides.find(s => s.id === slideId);
+                    if (!slide) return;
+                    const task = slide.elements.find(e => e.id === taskId && e.type === 'ai_task');
+                    if (!task) return;
+                    task.content = newPrompt;
+                    updateSlideInDB(slideId, { elements: slide.elements });
+                }));
+            },
+
+            removeAiTask: (slideId, taskId) => {
+                set(state => produce(state, draft => {
+                    const slide = draft.slides.find(s => s.id === slideId);
+                    if (!slide) return;
+                    slide.elements = slide.elements.filter(e => e.id !== taskId);
+                    updateSlideInDB(slideId, { elements: slide.elements });
+                }));
+            },
+            
             updateSlideNotes: (slideId, notes) => {
                 set(state => produce(state, draft => {
                     const slide = draft.slides.find(s => s.id === slideId);
@@ -248,9 +280,10 @@ export const usePresentationStore = create(
                 if (presentationId) {
                     try {
                         const supabase = createClient();
-                        const { data, error } = await supabase.from('slides').insert({
+                const { data, error } = await supabase.from('slides').insert({
                             presentation_id: presentationId,
                             order: newSlide.order,
+                            slide_number: newSlide.order,
                             elements: newSlide.elements,
                             notes: newSlide.notes,
                             image_url: newSlide.image_url,
@@ -270,6 +303,32 @@ export const usePresentationStore = create(
             },
             
             setSlides: (slides) => set({ slides, activeSlideId: slides[0]?.id || null, currentSlideIndex: 0, messages: [] }),
+
+            // Finalize: send blueprint (slides with queued ai_task prompts) to backend to generate slide HTML
+            finalizePresentation: async () => {
+                const { presentationId } = get();
+                if (!presentationId) return false;
+                try {
+                    const slides = get().slides;
+                    const response = await fetch('/api/ai-command', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ task: 'generate_from_blueprint', context: { presentationId, slides } }),
+                    });
+                    if (!response.ok) throw new Error('Finalize failed');
+                    const result = await response.json();
+                    if (result.type === 'finalized' && Array.isArray(result.slides)) {
+                        set({ slides: result.slides });
+                        toast.success('Presentation generated from outline!');
+                        return true;
+                    }
+                    return false;
+                } catch (e) {
+                    console.error('Finalize error', e);
+                    toast.error(e.message || 'Failed to generate from outline');
+                    return false;
+                }
+            },
             
             setActiveSlideId: (id) => {
                 const slides = get().slides;
@@ -296,7 +355,11 @@ export const usePresentationStore = create(
                 set(state => produce(state, draft => {
                     const [removed] = draft.slides.splice(startIndex, 1);
                     draft.slides.splice(endIndex, 0, removed);
-                    draft.slides.forEach((s, idx) => { s.order = idx + 1; updateSlideInDB(s.id, { order: s.order }); });
+                    draft.slides.forEach((s, idx) => { 
+                        s.order = idx + 1; 
+                        // keep DB's slide_number in sync with our order field
+                        updateSlideInDB(s.id, { order: s.order, slide_number: s.order }); 
+                    });
                 }));
                 toast.success("Outline reordered.");
             },

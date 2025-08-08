@@ -1,3 +1,5 @@
+// src/core/schema.js
+
 // Moving toward Superstruct for streaming-friendly partial validation
 import { object, array, string, number, union, literal, nullable, optional, enums, partial } from 'superstruct';
 
@@ -105,4 +107,3 @@ export const validateIncremental = (chunk) => {
     return null;
   }
 };
-

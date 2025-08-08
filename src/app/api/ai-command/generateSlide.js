@@ -1,3 +1,5 @@
+// src/app/api/ai-command/generateSlide.js
+
 import { diagramSchema, safeParseJSON, themeOutputSchema } from '@/core/schema';
 import { v4 as uuidv4 } from 'uuid';
 import { Buffer } from 'buffer';
@@ -12,7 +14,7 @@ export async function generateDiagram(context, supabaseAdmin) {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.DIAGRAM_MODEL || 'openai/gpt-4o-mini', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' } })
+      body: JSON.stringify({ model: process.env.DIAGRAM_MODEL || 'openai/gpt-oss-20b:free', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' } })
     });
     if (!res.ok) throw new Error('Diagram model failed');
     const ai = await res.json();
@@ -42,7 +44,7 @@ export async function generateImage(context, supabaseAdmin) {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.IMAGE_MODEL || 'openai/gpt-4o-mini', messages: [{ role: 'user', content: masterPrompt }] })
+      body: JSON.stringify({ model: process.env.IMAGE_MODEL || 'openai/gpt-oss-20b:free', messages: [{ role: 'user', content: masterPrompt }] })
     });
     if (!res.ok) throw new Error('Image model failed');
     const data = await res.json();
@@ -69,7 +71,7 @@ export async function generateTheme(context, supabaseAdmin) {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.THEME_MODEL || 'openai/gpt-4o-mini', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' } })
+      body: JSON.stringify({ model: process.env.THEME_MODEL || 'openai/gpt-oss-20b:free', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' } })
     });
     if (!res.ok) throw new Error('Theme model failed');
     const ai = await res.json();
@@ -85,4 +87,3 @@ export async function generateTheme(context, supabaseAdmin) {
   }).eq('id', presentationId);
   return { type: 'theme', theme };
 }
-

@@ -1,3 +1,4 @@
+// src/ui/components/VoiceRecorder/index.js
 'use client';
 import { useEffect, useRef, useState } from 'react';
 
@@ -39,4 +40,3 @@ export default function VoiceRecorder({ onTranscript }) {
     </button>
   );
 }
-

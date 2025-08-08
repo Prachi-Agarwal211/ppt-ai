@@ -1,3 +1,5 @@
+// src/app/dashboard/components/Diagram.js
+
 import { MermaidDiagram } from './MermaidDiagram';
 
 /**

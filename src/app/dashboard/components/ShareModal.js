@@ -1,3 +1,5 @@
+// src/app/dashboard/components/ShareModal.js
+
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiLink, FiClipboard, FiCheck, FiLoader } from 'react-icons/fi';

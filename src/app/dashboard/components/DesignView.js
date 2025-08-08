@@ -1,3 +1,5 @@
+// src/app/dashboard/components/DesignView.js
+
 import { motion } from 'framer-motion';
 import { usePresentationStore, getElement } from '@/utils/store';
 import { useMemo, useRef, useState, useEffect } from 'react';

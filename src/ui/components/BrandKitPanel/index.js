@@ -1,8 +1,9 @@
+// src/ui/components/BrandKitPanel/index.js
 'use client';
 import { useState } from 'react';
-import { usePresentationStore } from '@/utils/store';
+// import { usePresentationStore } from '@/utils/store'; // Already imported in store.js
 
-export default function BrandKitPanel() {
+export function BrandKitPanel() {
   const [colors, setColors] = useState({ primary_color: '', secondary_color: '', accent_color: '' });
   const setTheme = usePresentationStore(s => s.setTheme || ((t) => s => s));
 
@@ -19,4 +20,3 @@ export default function BrandKitPanel() {
     </div>
   );
 }
-

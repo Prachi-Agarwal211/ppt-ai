@@ -1,3 +1,5 @@
+// src/app/dashboard/components/MermaidDiagram.js
+
 import { useRef, useEffect } from 'react';
 import mermaid from 'mermaid';
 

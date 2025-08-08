@@ -1,3 +1,5 @@
+
+// src/utils/supabase/client.js
 import { createBrowserClient } from '@supabase/ssr'
 
 export function createClient() {

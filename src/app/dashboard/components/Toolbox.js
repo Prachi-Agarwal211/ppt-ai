@@ -1,15 +1,17 @@
+// src/app/dashboard/components/Toolbox.js
+
 'use client'; // --- FIX: This component uses hooks, so it must be a Client Component.
 
 import { FiCpu, FiGitMerge, FiLayers, FiSettings, FiImage, FiVideo, FiLoader } from 'react-icons/fi';
 import { usePresentationStore, getElement } from '@/utils/store';
 
-const AiButton = ({ command, title, icon: Icon, disabled, tooltip }) => {
-    const { sendCommand, isAssistantProcessing } = usePresentationStore();
+const AiButton = ({ onClick, title, icon: Icon, disabled, tooltip }) => {
+    const { isAssistantProcessing } = usePresentationStore();
     const isDisabled = disabled || isAssistantProcessing;
 
     return (
         <button 
-            onClick={() => sendCommand({ task: command })} 
+            onClick={onClick} 
             disabled={isDisabled} 
             className="secondary-button !rounded-lg justify-start text-sm disabled:opacity-50"
             title={tooltip || title}
@@ -21,7 +23,7 @@ const AiButton = ({ command, title, icon: Icon, disabled, tooltip }) => {
 };
 
 export const Toolbox = () => {
-    const { presentationId, activeSlideId, slides } = usePresentationStore();
+    const { presentationId, activeSlideId, slides, addAiTask } = usePresentationStore();
     const activeSlide = slides.find(s => s.id === activeSlideId);
     const hasImageSuggestion = !!(activeSlide && getElement(activeSlide, 'image_suggestion'));
 
@@ -30,15 +32,15 @@ export const Toolbox = () => {
             <h4 className="text-xs font-semibold text-gray-400 px-2">AI TOOLS</h4>
             <div className="grid grid-cols-2 gap-2">
                 <AiButton 
-                    command="generate_image" 
-                    title="AI Image" 
+                    onClick={() => activeSlideId && addAiTask(activeSlideId, 'image', getElement(activeSlide, 'image_suggestion')?.content || '')} 
+                    title="Queue: AI Image" 
                     icon={FiCpu} 
-                    disabled={!activeSlideId || !hasImageSuggestion} 
-                    tooltip={!hasImageSuggestion ? "This slide has no image suggestion from the AI." : "Generate an AI image"}
+                    disabled={!activeSlideId}
+                    tooltip={!hasImageSuggestion ? "No image suggestion; you can edit the task prompt in Outline." : "Queue an AI image task"}
                 />
                 <AiButton 
-                    command="generate_diagram" 
-                    title="✨ AI Diagram" 
+                    onClick={() => activeSlideId && addAiTask(activeSlideId, 'diagram', 'Describe the diagram you want...')} 
+                    title="✨ Queue: AI Diagram" 
                     icon={FiGitMerge} 
                     disabled={!activeSlideId} 
                 />
@@ -46,8 +48,8 @@ export const Toolbox = () => {
             <h4 className="text-xs font-semibold text-gray-400 px-2 pt-2">STYLE</h4>
             <div className="grid grid-cols-2 gap-2">
                 <AiButton 
-                    command="generate_theme" 
-                    title="✨ AI Theme" 
+                    onClick={() => activeSlideId && addAiTask(activeSlideId, 'theme', 'Describe theme (e.g., cyberpunk, minimalist)')} 
+                    title="✨ Queue: AI Theme" 
                     icon={FiLayers} 
                     disabled={!presentationId} 
                 />

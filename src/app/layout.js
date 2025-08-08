@@ -1,3 +1,5 @@
+// src/app/layout.js
+
 'use client'; 
 
 import React, { Suspense } from 'react';

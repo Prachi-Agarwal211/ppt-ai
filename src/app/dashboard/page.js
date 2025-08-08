@@ -1,3 +1,5 @@
+// src/app/dashboard/page.js
+
 // --- FIX #1: This entire page must be a Client Component because it uses hooks.
 'use client';
 

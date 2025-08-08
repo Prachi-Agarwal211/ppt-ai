@@ -1,6 +1,7 @@
+// src/utils/downloader.js
 let pptxgen;
-import toast from 'react-hot-toast';
-import { getElement } from './store'; // Import our shared helper function
+// import toast from 'react-hot-toast'; // Already imported in store.js
+// import { getElement } from './store'; // Already imported in store.js
 
 /**
  * Generates and downloads a PPTX presentation from the current slides.

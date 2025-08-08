@@ -1,3 +1,5 @@
+// src/app/dashboard/components/LeftSidebar.js
+
 'use client';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { FiPlus, FiTrash2, FiLoader } from 'react-icons/fi';

@@ -1,3 +1,5 @@
+// src/app/share/[shareId]/page.js
+
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
@@ -6,7 +8,7 @@ import Link from 'next/link';
 
 // This is a SERVER COMPONENT. It runs on the server to securely fetch data.
 export default async function SharePage({ params }) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,

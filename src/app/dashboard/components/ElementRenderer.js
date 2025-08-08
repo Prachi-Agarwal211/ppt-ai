@@ -1,4 +1,6 @@
 // src/app/dashboard/components/ElementRenderer.js
+
+// src/app/dashboard/components/ElementRenderer.js
 'use client';
 
 import { motion } from 'framer-motion';

@@ -1,3 +1,5 @@
+// src/app/dashboard/components/header.js
+
 'use client';
 import { motion } from 'framer-motion';
 import { FiCpu, FiEdit, FiLayout, FiPlay, FiShare2, FiDownload, FiLogOut, FiPlusCircle } from 'react-icons/fi';

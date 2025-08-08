@@ -1,3 +1,5 @@
+// src/app/dashboard/components/HistorySidebar.js
+
 import { FiLoader, FiInbox } from 'react-icons/fi';
 
 const HistoryItemSkeleton = () => (

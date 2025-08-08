@@ -1,3 +1,5 @@
+// src/core/types.js
+
 // Plain JS typedefs via JSDoc for editor IntelliSense
 
 /**
@@ -56,4 +58,3 @@
  * @property {string|null} [image_url]
  * @property {string|number} [presentation_id]
  */
-

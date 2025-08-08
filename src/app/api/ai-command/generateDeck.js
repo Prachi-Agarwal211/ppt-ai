@@ -1,3 +1,5 @@
+// src/app/api/ai-command/generateDeck.js
+
 import { v4 as uuidv4 } from 'uuid';
 import { blueprintSchema, slideContentSchema, safeParseJSON } from '@/core/schema';
 
@@ -15,7 +17,7 @@ export async function generatePresentationBlueprint(topic, slideCount) {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: process.env.ARCHITECT_MODEL || 'openai/gpt-4o-mini', messages: [{ role: 'user', content: architectPrompt }], response_format: { type: 'json_object' } })
+    body: JSON.stringify({ model: process.env.ARCHITECT_MODEL || 'openai/gpt-oss-20b:free', messages: [{ role: 'user', content: architectPrompt }], response_format: { type: 'json_object' } })
   });
   if (!response.ok) throw new Error(`Architect AI failed: ${response.statusText}`);
   const ai = await response.json();
@@ -39,7 +41,7 @@ export async function generateSlideContent(presentationTitle, slideTitle, visual
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: process.env.CONTENT_MODEL || 'openai/gpt-4o-mini', messages: [{ role: 'user', content: contentPrompt }], response_format: { type: 'json_object' } })
+    body: JSON.stringify({ model: process.env.CONTENT_MODEL || 'openai/gpt-oss-20b:free', messages: [{ role: 'user', content: contentPrompt }], response_format: { type: 'json_object' } })
   });
   if (!response.ok) throw new Error(`Content AI failed: ${response.statusText}`);
   const ai = await response.json();
@@ -67,6 +69,7 @@ export async function handleGeneratePresentation(context, user, supabaseAdmin) {
     const skeletonSlides = blueprint.slides.map((slide, idx) => ({
       presentation_id: presentation.id,
       order: idx + 1,
+      slide_number: idx + 1, // keep DB happy if it requires slide_number
       elements: [
         { id: uuidv4(), type: 'title', content: slide.slide_title, position: { x: 5, y: 10 }, size: { width: 90, height: 15 } },
         { id: uuidv4(), type: 'content', content: [], position: { x: 10, y: 30 }, size: { width: 80, height: 60 } },
@@ -98,4 +101,3 @@ export async function handleGeneratePresentation(context, user, supabaseAdmin) {
     throw error;
   }
 }
-

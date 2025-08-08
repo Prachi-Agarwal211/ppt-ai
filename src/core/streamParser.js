@@ -1,3 +1,5 @@
+// src/core/streamParser.js
+
 import { validateIncremental } from './schema';
 
 let buffer = '';
@@ -24,4 +26,3 @@ export const createSlideStream = () => {
     },
   });
 };
-

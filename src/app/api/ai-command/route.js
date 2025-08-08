@@ -1,3 +1,5 @@
+// src/app/api/ai-command/route.js
+
 import { NextResponse } from 'next/server';
 import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { createClient } from '@/utils/supabase/server';
@@ -31,7 +33,7 @@ export async function POST(request) {
     }
 
     const { task, context } = await request.json();
-    const supabase = createClient();
+    const supabase = await createClient();
     
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -63,7 +65,7 @@ export async function POST(request) {
             const brainResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model: process.env.INTERPRETATION_MODEL || 'openai/gpt-4o-mini', messages: [{ role: 'user', content: interpretationPrompt }], response_format: { type: "json_object" } }),
+                    body: JSON.stringify({ model: process.env.INTERPRETATION_MODEL || 'openai/gpt-oss-20b:free', messages: [{ role: 'user', content: interpretationPrompt }], response_format: { type: "json_object" } }),
             });
             if (!brainResponse.ok) throw new Error("AI Brain failed to interpret command.");
             const decision = await brainResponse.json();
@@ -88,6 +90,25 @@ export async function POST(request) {
             case 'generate_image':
                 result = await generateImage(context, supabaseAdmin);
                 break;
+            case 'generate_from_blueprint': {
+                const { presentationId, slides } = context;
+                if (!presentationId || !Array.isArray(slides)) throw new Error('Missing presentationId or slides');
+                // fetch presentation theme for better theming
+                const { data: presentation } = await supabaseAdmin.from('presentations').select('id, theme_primary_color, theme_secondary_color, theme_accent_color').eq('id', presentationId).single();
+                const { generateSlideHtml } = await import('./generateSlideHtml');
+                const updatedSlides = [];
+                for (const slide of slides) {
+                    const html = await generateSlideHtml({ slide, presentation, freeMode: process.env.FREE_MODE === 'true' });
+                    const newElements = [
+                        ...(slide.elements || []).filter(e => e.type !== 'generated_html'),
+                        { id: 'gen-'+(slide.id||''), type: 'generated_html', content: html }
+                    ];
+                    await supabaseAdmin.from('slides').update({ elements: newElements }).eq('id', slide.id);
+                    updatedSlides.push({ ...slide, elements: newElements });
+                }
+                result = { type: 'finalized', slides: updatedSlides };
+                break;
+            }
             default:
                 result = { type: 'clarification', message: "I'm not sure how to handle that request. You can ask me to generate an image, a diagram, or change the theme." };
         }

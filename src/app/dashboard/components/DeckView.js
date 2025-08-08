@@ -1,3 +1,5 @@
+// src/app/dashboard/components/DeckView.js
+
 'use client';
 import { motion } from 'framer-motion';
 import { usePresentationStore, getElement } from '@/utils/store';
@@ -122,9 +124,22 @@ const DeckView = () => {
                     className="absolute w-full h-full top-0 left-0 object-cover rounded-xl -z-10"
                   />
                 )}
-                {/* --- FIX: Conditionally render elements only when container size is known --- */}
-                {containerSize.width > 0 && activeSlide.elements.map(el => {
-                    if (el.type === 'image_suggestion') return null;
+                {/* If slide has generated_html, render it fully in an iframe; else render legacy element layout */}
+                {(() => {
+                  const gen = activeSlide.elements.find(e => e.type === 'generated_html');
+                  if (gen?.content) {
+                    return (
+                      <iframe
+                        title={`slide-${activeSlide.id}`}
+                        className="absolute inset-0 w-full h-full rounded-xl"
+                        sandbox="allow-scripts allow-same-origin"
+                        srcDoc={gen.content}
+                      />
+                    );
+                  }
+                  if (!(containerSize.width > 0)) return null;
+                  return activeSlide.elements.map(el => {
+                    if (el.type === 'image_suggestion' || el.type === 'ai_task' || el.type === 'generated_html') return null;
                     return isEditMode ? (
                         <EditableElement key={el.id} element={el} slideId={activeSlide.id} containerSize={containerSize} />
                     ) : (
@@ -132,7 +147,8 @@ const DeckView = () => {
                            <ElementRenderer element={el} />
                         </div>
                     );
-                })}
+                  });
+                })() }
             </div>
             <div className="w-full">
                 <Toolbox />
