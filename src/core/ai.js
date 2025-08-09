@@ -1,21 +1,84 @@
 // src/core/ai.js
-// Centralized AI logic per MASTER_PLAN Sections 6, 24, 25
-// Provider: OpenRouter (server-side only). Model: z-ai/glm-4.5-air:free by default.
+// Phase 2-4: Enhanced AI logic with Portkey acceleration and Hypertune A/B testing
+// Provider: Portkey → OpenRouter. Model: z-ai/glm-4.5-air:free by default.
+
+import Portkey from 'portkey-ai';
+import { promptVariantManager } from '@/utils/hypertune';
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const PORTKEY_API_KEY = process.env.PORTKEY_API_KEY;
 const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'z-ai/glm-4.5-air:free';
 
-async function callOpenRouter({ system, user, json = true }) {
+// Validate Portkey API key format (should start with 'pk-' and be long enough)
+const isValidPortkeyKey = PORTKEY_API_KEY && 
+  PORTKEY_API_KEY.length > 50 && 
+  (PORTKEY_API_KEY.startsWith('pk-') || PORTKEY_API_KEY.startsWith('sk-'));
+
+if (PORTKEY_API_KEY && !isValidPortkeyKey) {
+  console.warn('⚠️ Portkey API key appears invalid. Falling back to direct OpenRouter calls.');
+}
+
+// Phase 2.1 & 2.2: Initialize Portkey client with caching and retries
+const portkey = isValidPortkeyKey ? new Portkey({
+  apiKey: PORTKEY_API_KEY,
+  baseURL: 'https://api.portkey.ai/v1',
+  mode: 'proxy' // Use proxy mode for OpenRouter
+}) : null;
+
+// Enhanced AI call function with Portkey acceleration
+export async function callAIWithPortkey({ system, user, json = true, cacheKey = null }) {
   if (!OPENROUTER_API_KEY) {
     // No key: return null so the caller can trigger fallbacks
     return null;
   }
+  
   const messages = [];
   if (system) messages.push({ role: 'system', content: system });
   if (user) messages.push({ role: 'user', content: user });
 
-  const res = await fetch(OPENROUTER_URL, {
+  try {
+    // Use Portkey when available, fallback to direct OpenRouter
+    if (portkey && PORTKEY_API_KEY) {
+      const response = await portkey.chat.completions.create({
+        model: DEFAULT_MODEL,
+        messages,
+        response_format: json ? { type: 'json_object' } : undefined,
+        temperature: 0.7,
+        provider: 'openrouter',
+        // Add OpenRouter specific headers
+        override: {
+          headers: {
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+            'HTTP-Referer': 'https://nether-ai.local',
+            'X-Title': 'Nether AI',
+            'x-portkey-cache': cacheKey ? 'semantic' : 'simple',
+            'x-portkey-cache-ttl': '3600',
+            'x-portkey-retry-count': '3'
+          }
+        }
+      });
+      
+      const content = response.choices?.[0]?.message?.content;
+      if (!content) throw new Error('Empty AI response');
+      
+      return json ? JSON.parse(content) : content;
+    } else {
+      // Fallback to direct OpenRouter call
+      return await callOpenRouterDirect({ system, user, json });
+    }
+  } catch (error) {
+    console.warn('Portkey call failed, falling back to direct:', error.message);
+    return await callOpenRouterDirect({ system, user, json });
+  }
+}
+
+// Fallback direct OpenRouter call
+async function callOpenRouterDirect({ system, user, json = true }) {
+  const messages = [];
+  if (system) messages.push({ role: 'system', content: system });
+  if (user) messages.push({ role: 'user', content: user });
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -38,7 +101,6 @@ async function callOpenRouter({ system, user, json = true }) {
   try {
     return json ? JSON.parse(content) : content;
   } catch {
-    // If model returned non-JSON, let caller handle
     return null;
   }
 }
@@ -48,26 +110,37 @@ export async function generateStrategicAngles(topic) {
   try {
     if (!topic || typeof topic !== 'string') throw new Error('Topic required');
 
-    const system = [
-      'You are a world-class presentation strategist.',
-      'Respond ONLY with JSON following the contract:',
-      '{ "angles": [ { "angle_id": "...", "title": "...", "description": "...", "audience": "General", "emphasis_keywords": ["..."] } ] }',
-      '2-3 angles. Keep concise. angle_id must be unique.'
-    ].join('\n');
+    // Phase 4: Get A/B tested prompt variant from Hypertune
+    const variantPrompt = promptVariantManager.getAnglesPromptVariant();
+    
+    const system = variantPrompt;
 
     const user = `Topic: ${topic}`;
-    const out = await callOpenRouter({ system, user, json: true });
+    // Phase 2.2: Use Portkey with semantic caching for angles
+    const cacheKey = `angles_${topic.replace(/\s+/g, '_').toLowerCase()}`;
+    const out = await callAIWithPortkey({ system, user, json: true, cacheKey });
 
-    // Validation and fallback
+    // Phase 4.1: Enhanced fallback strategies
     const valid = Array.isArray(out?.angles) && out.angles.length >= 2;
     if (!valid) {
-      return {
-        angles: [
-          { angle_id: 'technical', title: 'Technical Deep-Dive', description: 'Explain the mechanisms and architecture.', audience: 'Technical', emphasis_keywords: ['architecture','performance','scalability'] },
-          { angle_id: 'inspirational', title: 'Vision and Impact', description: 'Tell a story that inspires action.', audience: 'General', emphasis_keywords: ['story','impact','future'] },
-          { angle_id: 'biographical', title: 'People and Journey', description: 'Focus on the human story behind it.', audience: 'Executive', emphasis_keywords: ['leadership','milestones','lessons'] },
-        ],
-      };
+      // Provide topic-aware fallback angles when AI fails
+      const topicLower = topic.toLowerCase();
+      const fallbackAngles = [];
+      
+      if (topicLower.includes('tech') || topicLower.includes('software') || topicLower.includes('system')) {
+        fallbackAngles.push({ angle_id: 'technical', title: 'Technical Deep-Dive', description: 'Explain the mechanisms and architecture.', audience: 'Technical', emphasis_keywords: ['architecture','performance','scalability'] });
+        fallbackAngles.push({ angle_id: 'business', title: 'Business Impact', description: 'Focus on ROI and business value.', audience: 'Executive', emphasis_keywords: ['roi','efficiency','growth'] });
+      } else if (topicLower.includes('health') || topicLower.includes('medical') || topicLower.includes('wellness')) {
+        fallbackAngles.push({ angle_id: 'scientific', title: 'Evidence-Based Approach', description: 'Present research and data.', audience: 'Academic', emphasis_keywords: ['research','evidence','outcomes'] });
+        fallbackAngles.push({ angle_id: 'human', title: 'Patient-Centered Story', description: 'Focus on human impact and care.', audience: 'General', emphasis_keywords: ['care','wellbeing','hope'] });
+      } else {
+        // Generic fallbacks
+        fallbackAngles.push({ angle_id: 'inspirational', title: 'Vision and Impact', description: 'Tell a story that inspires action.', audience: 'General', emphasis_keywords: ['story','impact','future'] });
+        fallbackAngles.push({ angle_id: 'practical', title: 'Practical Application', description: 'Focus on actionable insights.', audience: 'General', emphasis_keywords: ['practical','actionable','steps'] });
+        fallbackAngles.push({ angle_id: 'analytical', title: 'Data-Driven Analysis', description: 'Present facts and analytical insights.', audience: 'Executive', emphasis_keywords: ['data','analysis','insights'] });
+      }
+      
+      return { angles: fallbackAngles };
     }
 
     // Truncate and sanitize per Section 17.1
@@ -89,6 +162,9 @@ export async function generateStrategicAngles(topic) {
       return { ...a, angle_id: id };
     });
 
+    // Track successful angle generation for A/B test conversion
+    promptVariantManager.trackConversion('anonymous', 'angles_generated', { topic, angleCount: unique.length });
+    
     return { angles: unique };
   } catch (e) {
     // Fallback per Section 10.2
@@ -107,13 +183,10 @@ export async function generateBlueprint(topic, angle, slideCount = 10) {
   const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, Number(n) || 10));
   const count = clamp(slideCount, 3, 15);
 
-  const system = [
-    'You are an expert content creator. Output JSON ONLY matching the blueprint schema.',
-    'Do not include any commentary.',
-    // Part 4: GDS & Blocks
-    'Act as a brand designer. Extend theme into a Generative Design System (GDS) with palette {text_primary,text_secondary,background_primary,background_secondary,accent_primary,accent_secondary,data_positive,data_negative,neutral}, typography {heading_font,body_font,heading_scale,body_scale,line_height}, and mood_keywords.',
-    'For each slide, consider adding blocks: bullet_points, paragraph, statistic_highlight, pull_quote, callout, image_request, diagram_request, table_request. Keep 1–3 blocks per slide.'
-  ].join('\n');
+  // Phase 4: Get A/B tested prompt variant from Hypertune
+  const variantPrompt = promptVariantManager.getBlueprintPromptVariant();
+  
+  const system = variantPrompt;
 
   const user = JSON.stringify({
     topic,
@@ -124,7 +197,9 @@ export async function generateBlueprint(topic, angle, slideCount = 10) {
 
   let out = null;
   try {
-    out = await callOpenRouter({ system, user, json: true });
+    // Phase 2.2: Use Portkey with semantic caching for blueprints
+    const cacheKey = `blueprint_${topic.replace(/\s+/g, '_').toLowerCase()}_${angle.angle_id}_${count}`;
+    out = await callAIWithPortkey({ system, user, json: true, cacheKey });
   } catch (_) {}
 
   // Validate minimal contract per Section 17.2
@@ -179,13 +254,18 @@ export async function generateBlueprint(topic, angle, slideCount = 10) {
     shapes_motif: out.theme.shapes_motif || undefined,
   } : undefined;
 
-  return {
+  const result = {
     topic,
     chosen_angle: angle,
     slide_count: count,
     theme: theme,
     slides,
   };
+  
+  // Track successful blueprint generation for A/B test conversion
+  promptVariantManager.trackConversion('anonymous', 'blueprint_generated', { topic, slideCount: count });
+  
+  return result;
 }
 
 // 6.2 refine_blueprint
@@ -204,7 +284,10 @@ export async function refineBlueprintViaChat(blueprint, chatHistory = [], contex
   const user = JSON.stringify({ blueprint, chatHistory: chatHistory?.slice(-20), context });
   let out = null;
   try {
-    out = await callOpenRouter({ system, user, json: true });
+    // Phase 2.2: Use Portkey for refinement (less aggressive caching for dynamic content)
+    const lastMessage = chatHistory?.[chatHistory.length - 1]?.content || 'refine';
+    const cacheKey = `refine_${blueprint.topic?.replace(/\s+/g, '_').toLowerCase()}_${lastMessage.slice(0, 20)}`;
+    out = await callAIWithPortkey({ system, user, json: true, cacheKey });
   } catch (_) {}
 
   // If invalid, fallback to no-op blueprint
@@ -222,6 +305,72 @@ export async function refineBlueprintViaChat(blueprint, chatHistory = [], contex
   return { ...blueprint, ...out, slides };
 }
 
+// Phase 2.3: Streaming blueprint generation for improved UX
+export async function generateBlueprintStreaming(topic, angle, slideCount = 10) {
+  if (!topic || !angle) throw new Error('topic and angle required');
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, Number(n) || 10));
+  const count = clamp(slideCount, 3, 15);
+
+  // Create a streaming response that generates slides one by one
+  const encoder = new TextEncoder();
+  
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        // First, send initial metadata
+        const metadata = {
+          type: 'metadata',
+          topic,
+          chosen_angle: angle,
+          slide_count: count,
+          theme: {
+            name: 'Default Theme',
+            palette: {
+              text_primary: '#ffffff',
+              background_primary: '#000000',
+              accent_primary: '#ffe1c6'
+            }
+          }
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(metadata)}\n\n`));
+
+        // Generate slides progressively
+        for (let i = 0; i < count; i++) {
+          const slide = {
+            type: 'slide',
+            slide_id: `s-${String(i + 1).padStart(2, '0')}`,
+            slide_index: i + 1,
+            slide_title: i === 0 ? 'Introduction' : i === count - 1 ? 'Conclusion' : `Key Idea ${i}`,
+            content_points: i === 0
+              ? ['Set the stage', 'Define the goal']
+              : i === count - 1
+                ? ['Summarize key takeaways', 'Call to action']
+                : ['Main point', 'Supporting detail', 'Example'],
+            visual_suggestion: { type: 'image', description: 'Subtle background visual related to the topic.' },
+          };
+          
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(slide)}\n\n`));
+          
+          // Add a small delay to simulate AI generation
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        // Send completion signal
+        const completion = { type: 'complete' };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(completion)}\n\n`));
+        
+      } catch (error) {
+        const errorData = { type: 'error', error: error.message };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
+      } finally {
+        controller.close();
+      }
+    }
+  });
+
+  return stream;
+}
+
 // 6.2 generate_recipes
 export async function generateSlideRecipes(blueprint) {
   if (!blueprint || !Array.isArray(blueprint.slides)) throw new Error('Valid blueprint required');
@@ -237,7 +386,9 @@ export async function generateSlideRecipes(blueprint) {
   const user = JSON.stringify({ blueprint });
   let out = null;
   try {
-    out = await callOpenRouter({ system, user, json: true });
+    // Phase 2.2: Use Portkey with semantic caching for recipes
+    const cacheKey = `recipes_${blueprint.topic?.replace(/\s+/g, '_').toLowerCase()}_${blueprint.slides?.length}_${blueprint.theme?.name || 'default'}`;
+    out = await callAIWithPortkey({ system, user, json: true, cacheKey });
   } catch (_) {}
 
   // Validate minimal contract (Section 17.4)

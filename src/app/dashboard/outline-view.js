@@ -6,6 +6,7 @@ import { useAppStore } from '@/utils/zustand-store';
 
 export default function OutlineView() {
   const blueprint = useAppStore((s) => s.presentation.blueprint);
+  const isLoading = useAppStore((s) => s.isLoading);
   const updateBlueprintLocal = useAppStore((s) => s.updateBlueprintLocal);
   const generateRecipes = useAppStore((s) => s.generateRecipes);
   const refineBlueprintViaChat = useAppStore((s) => s.refineBlueprintViaChat);
@@ -14,11 +15,22 @@ export default function OutlineView() {
   const [chatHistory, setChatHistory] = useState([]); // local UI history
   const [aiUpdated, setAiUpdated] = useState(false);
 
+  // Phase 2.2 & 2.4: Handle loading state and streaming updates
   if (!blueprint) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-white/70">No blueprint yet. Go back to Idea.</div>
+      <div className="min-h-screen flex items-center justify-center text-white">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white/70 mx-auto mb-4"></div>
+          <div className="text-xl font-semibold mother-of-pearl-text mb-2">The AI is creating your presentation outline...</div>
+          <div className="text-white/60">This may take a few moments</div>
+        </div>
+      </div>
     );
   }
+
+  // Show progress indicator during streaming
+  const showStreamingProgress = isLoading && blueprint && blueprint.slides;
+  const streamingProgress = showStreamingProgress ? blueprint.slides.length : 0;
 
   const handleTitleChange = (idx, val) => {
     const slides = [...(blueprint.slides || [])];
@@ -63,6 +75,21 @@ export default function OutlineView() {
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-3">
       <div className="lg:col-span-2 p-6 space-y-6 overflow-y-auto">
+        {/* Phase 2.4: Show streaming progress */}
+        {showStreamingProgress && (
+          <div className="bg-white/10 border border-white/20 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="animate-pulse w-3 h-3 bg-yellow-400 rounded-full"></div>
+              <div className="text-white font-medium">Generating slides... ({streamingProgress}/{blueprint.slide_count || 0})</div>
+            </div>
+            <div className="mt-2 bg-white/5 rounded-full h-2">
+              <div 
+                className="bg-gradient-to-r from-yellow-400 to-orange-400 h-2 rounded-full transition-all duration-500" 
+                style={{ width: `${(streamingProgress / (blueprint.slide_count || 1)) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
         {(blueprint.slides || []).map((s, idx) => (
           <div key={s.slide_id} className={`bg-white/5 border border-white/10 rounded p-4 ${aiUpdated ? 'ai-updated' : ''}`}>
             <label className="block text-sm text-white/60">Title</label>

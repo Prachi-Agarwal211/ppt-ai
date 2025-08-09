@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@genkit-ai/core": "^1.16.0",
     "@hello-pangea/dnd": "^18.0.1",
     "@react-three/drei": "^10.6.1",
     "@react-three/fiber": "^9.3.0",
@@ -17,6 +18,8 @@
     "ai": "^5.0.2",
     "cheerio": "^1.0.0",
     "framer-motion": "^12.23.12",
+    "genkit": "^1.16.0",
+    "hypertune": "^2.7.2",
     "immer": "^10.1.1",
     "isomorphic-dompurify": "^2.13.0",
     "lucide-react": "^0.536.0",
@@ -25,6 +28,7 @@
     "my-adventure-app": "file:",
     "next": "15.4.5",
     "pdf-parse": "^1.1.1",
+    "portkey-ai": "^1.10.1",
     "pptxgenjs": "^4.0.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",

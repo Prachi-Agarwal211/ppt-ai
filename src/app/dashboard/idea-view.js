@@ -29,8 +29,8 @@ export default function IdeaView() {
   const onPickAngle = async (angle) => {
     // store desired slide count into state before generating blueprint
     useAppStore.setState((state) => ({ presentation: { ...state.presentation, slideCount } }));
-    const bp = await chooseAngleAndBuildBlueprint(angle);
-    if (bp) setActiveView('outline');
+    // Phase 2.1: Navigation now happens instantly inside chooseAngleAndBuildBlueprint
+    await chooseAngleAndBuildBlueprint(angle);
   };
 
   return (

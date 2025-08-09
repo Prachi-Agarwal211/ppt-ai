@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as AiCore from '@/core/ai';
+import { presentationFlow } from '@/core/presentation.flow';
 
 export async function POST(req) {
   try {
@@ -10,11 +11,26 @@ export async function POST(req) {
         result = await AiCore.generateStrategicAngles(payload?.topic || '');
         break;
       case 'generate_blueprint':
-        result = await AiCore.generateBlueprint(
-          payload?.topic || '',
-          payload?.angle || null,
-          Number(payload?.slideCount || 10)
-        );
+        // Phase 2.3: Support streaming for blueprint generation
+        if (payload?.stream) {
+          const stream = await AiCore.generateBlueprintStreaming(
+            payload?.topic || '',
+            payload?.angle || null,
+            Number(payload?.slideCount || 10)
+          );
+          return new Response(stream, {
+            headers: {
+              'Content-Type': 'text/plain; charset=utf-8',
+              'Transfer-Encoding': 'chunked'
+            }
+          });
+        } else {
+          result = await AiCore.generateBlueprint(
+            payload?.topic || '',
+            payload?.angle || null,
+            Number(payload?.slideCount || 10)
+          );
+        }
         break;
       case 'refine_blueprint':
         result = await AiCore.refineBlueprintViaChat(
@@ -25,6 +41,13 @@ export async function POST(req) {
         break;
       case 'generate_recipes':
         result = await AiCore.generateSlideRecipes(payload?.blueprint || null);
+        break;
+      case 'run_presentation_flow':
+        // Orchestrated end-to-end flow using Genkit
+        result = await presentationFlow.run({
+          topic: String(payload?.topic || ''),
+          slideCount: Number(payload?.slideCount || 10)
+        });
         break;
       default:
         return NextResponse.json({ error: 'Invalid AI action' }, { status: 400 });

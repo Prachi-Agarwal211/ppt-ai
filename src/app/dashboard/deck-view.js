@@ -3,15 +3,30 @@
 // DeckView per MASTER_PLAN Section 4.3
 import { useAppStore } from '@/utils/zustand-store';
 import { SlideRenderer } from '@/components/slide-renderer';
+import { useState } from 'react';
 
 export default function DeckView() {
   const recipes = useAppStore((s) => s.presentation.slideRecipes);
   const activeIndex = useAppStore((s) => s.presentation.activeSlideIndex);
+  const isLoading = useAppStore((s) => s.isLoading);
   const setActiveSlideIndex = useAppStore((s) => s.setActiveSlideIndex);
+  const exportToPPTX = useAppStore((s) => s.exportToPPTX);
+  
+  const [exportError, setExportError] = useState(null);
 
   const enterFullscreen = () => {
     const el = document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen();
+  };
+  
+  const handleExport = async () => {
+    try {
+      setExportError(null);
+      await exportToPPTX();
+    } catch (error) {
+      setExportError(error.message);
+      setTimeout(() => setExportError(null), 5000); // Clear error after 5 seconds
+    }
   };
 
   if (!recipes || recipes.length === 0) {
@@ -32,9 +47,22 @@ export default function DeckView() {
         <div className="flex items-center justify-between mb-3">
           <div className="text-white/80">Slide {activeIndex + 1} of {recipes.length}</div>
           <div className="flex gap-2">
+            <button 
+              className="secondary-button" 
+              onClick={handleExport}
+              disabled={isLoading}
+            >
+              {isLoading ? 'Exporting...' : 'Export PPTX'}
+            </button>
             <button className="primary-button" onClick={enterFullscreen}>Present</button>
           </div>
         </div>
+        {/* Phase 4.2: Export error display */}
+        {exportError && (
+          <div className="mb-3 p-3 bg-red-500/10 border border-red-500/20 rounded text-red-300 text-sm">
+            Export failed: {exportError}
+          </div>
+        )}
         <div className="aspect-video bg-black/30 border border-white/10 rounded">
           <SlideRenderer recipe={recipes[activeIndex]} />
         </div>

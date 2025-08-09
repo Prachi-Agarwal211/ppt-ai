@@ -14,8 +14,28 @@ const colorPalettes = [
 const VantaBackground = () => {
   const vantaRef = useRef(null);
   const [vantaEffect, setVantaEffect] = useState(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  // Phase 1: Use IntersectionObserver to defer initialization until visible
+  useEffect(() => {
+    if (!vantaRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(vantaRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
+    if (!isVisible) return;
     let effect; // Use a local variable for the instance
 
     // Helper function to load a script and return a promise
@@ -87,7 +107,7 @@ const VantaBackground = () => {
         effect.destroy();
       }
     };
-  }, []); // runs once on mount
+  }, [isVisible]); // Initialize when visible
 
   // This effect handles the color palette cycling and depends on the vantaEffect state
   useEffect(() => {

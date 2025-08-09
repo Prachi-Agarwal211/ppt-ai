@@ -28,6 +28,11 @@ const VantaBackground = dynamic(() => import('../components/VantaBackground'), {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
+      <head>
+        {/* Phase 1: Preconnect to CDNs for better performance */}
+        <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
