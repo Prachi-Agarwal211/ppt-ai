@@ -4,15 +4,16 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
+// Hoist palettes to module scope to keep stable references across renders
+const colorPalettes = [
+  { highlight: 0xfadadd, midtone: 0xebd8e6, lowlight: 0xffe1c6 },
+  { highlight: 0xebd8e6, midtone: 0xffe1c6, lowlight: 0xfadadd },
+  { highlight: 0xffe1c6, midtone: 0xfadadd, lowlight: 0xebd8e6 },
+];
+
 const VantaBackground = () => {
   const vantaRef = useRef(null);
   const [vantaEffect, setVantaEffect] = useState(null);
-
-  const colorPalettes = [
-    { highlight: 0xfadadd, midtone: 0xebd8e6, lowlight: 0xffe1c6 },
-    { highlight: 0xebd8e6, midtone: 0xffe1c6, lowlight: 0xfadadd },
-    { highlight: 0xffe1c6, midtone: 0xfadadd, lowlight: 0xebd8e6 },
-  ];
 
   useEffect(() => {
     let effect; // Use a local variable for the instance
@@ -86,7 +87,7 @@ const VantaBackground = () => {
         effect.destroy();
       }
     };
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []); // runs once on mount
 
   // This effect handles the color palette cycling and depends on the vantaEffect state
   useEffect(() => {
@@ -100,7 +101,7 @@ const VantaBackground = () => {
     }, 10000);
 
     return () => clearInterval(colorInterval);
-  }, [vantaEffect]); // This effect re-runs only when vantaEffect is successfully created
+  }, [vantaEffect]);
 
   return <div ref={vantaRef} className="fixed top-0 left-0 w-full h-full z-[-1] pointer-events-none" />;
 };

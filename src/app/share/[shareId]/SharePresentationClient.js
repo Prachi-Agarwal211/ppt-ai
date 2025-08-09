@@ -4,7 +4,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiArrowLeft, FiArrowRight } from 'react-icons/fi';
-import { ElementRenderer } from '@/app/dashboard/components/ElementRenderer'; // Use the shared renderer
+import Image from 'next/image';
+// ElementRenderer removed in MVP cleanup; render minimal content instead
 
 export const SharePresentationClient = ({ slides, presentation }) => {
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -54,24 +55,20 @@ export const SharePresentationClient = ({ slides, presentation }) => {
                     >
                         {activeSlide.image_url && (
                              <div className="absolute top-0 left-0 w-full h-full -z-10">
-                                <img src={activeSlide.image_url} alt="" className="w-full h-full object-cover"/>
+                              <Image src={activeSlide.image_url} alt="" fill className="object-cover" unoptimized />
                              </div>
                         )}
-                        {activeSlide.elements.map(el => (
-                             <div 
-                                key={el.id}
-                                style={{
-                                    position: 'absolute',
-                                    left: `${el.position.x}%`,
-                                    top: `${el.position.y}%`,
-                                    width: `${el.size.width}%`,
-                                    height: `${el.size.height}%`,
-                                }}
-                                className="flex flex-col justify-center"
-                            >
-                               <ElementRenderer element={el} theme={presentation.theme} />
-                            </div>
-                        ))}
+                        {/* Minimal fallback rendering for shared slides */}
+                        <div className="w-full h-full flex flex-col gap-3">
+                          <h2 className="text-white text-3xl font-bold">{activeSlide.title || 'Slide'}</h2>
+                          {Array.isArray(activeSlide.bullets) && (
+                            <ul className="list-disc pl-6 text-white/90">
+                              {activeSlide.bullets.map((b, i) => (
+                                <li key={i}>{b}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                     </motion.div>
                 </AnimatePresence>
             </div>

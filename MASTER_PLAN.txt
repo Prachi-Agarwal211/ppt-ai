@@ -1,0 +1,1051 @@
+NETHER AI – STREAMLINED MASTER PLAN (PART 1)
+A complete, end-to-end, implementation blueprint for simplifying, rebuilding, and shipping the first version on Vercel.
+
+Document Scope and Intent
+- This is a comprehensive text plan with no code. It explains what to do, in what order, and why.
+- The goal is to reduce complexity, keep the current visual identity, and deliver a robust first version focused on Idea → Outline → Deck.
+- We will use the existing Supabase project and OpenRouter integration (same model: z-ai/glm-4.5-air:free, or configured equivalent) without changing providers.
+- We will consolidate directories and logic, remove unnecessary modules, and keep only what is needed for an elegant MVP that is fast, scalable, and creative.
+- This Part 1 covers the strategic reset, directory simplification, functional specifications for each phase, detailed UI/UX definitions, data models (described, not coded), and the AI “Brain” architecture. In Parts 2 and 3, we will cover integration steps, validation flows, error-handling playbooks, QA, performance guidelines, and deployment runbook.
+
+Guiding Principles
+- Fewer files, more coherent code: co-locate logic and components per view.
+- AI is the Creative Director, frontend is the Rendering Engine.
+- Keep the current website theme: Vanta.js fog, glasmorphism, white text, pearl gradient for interactive elements.
+- Ruthlessly remove features that aren’t essential to Idea → Outline → Deck.
+- Reliability over breadth: a narrow but delightful flow that “just works.”
+
+Section 1 — Simplified Directory Structure
+1.1 Current State Summary
+- The existing codebase has many folders: multiple API routes, cognitive orchestration layers, templates, stream utilities, and fragmented dashboard components.
+- This causes maintenance and mental-load overhead, and introduces hidden coupling.
+
+1.2 Target Structure (Lean and Coherent)
+- Root (retain current configs and assets: package.json, next.config, tailwind, postcss, eslint, jsconfig/tsconfig if applicable, public/ static assets).
+- src/
+  - app/
+    - api/
+      - ai/
+        - route.js  (Single API endpoint for all AI tasks; routes by action field)
+    - dashboard/
+      - page.js         (Dashboard controller shell: manages activeView and layout)
+      - idea-view.js     (Idea & Blueprint generation)
+      - outline-view.js  (Chat-driven refinement + editable outline)
+      - deck-view.js     (Slide preview, thumbnails, assistant, present/design actions)
+    - share/             (Optional to keep minimal share page for later; do not expand yet)
+    - page.js            (Auth Landing; keep current theme and effects)
+    - layout.js          (Vanta.js fog background, glasmorphism; global shell)
+  - components/
+    - header.js          (Shared header if needed)
+    - slide-renderer.js  (Renders “Slide Recipe” JSON into consistent, styled UI)
+    - ui/                (Buttons, inputs using glasmorphism and consistent theme)
+  - core/
+    - ai.js              (All prompt logic + AI task orchestrations in one place)
+    - pptx-exporter.js   (Optional: PPTX export logic, kept minimal for Phase 1)
+  - utils/
+    - supabase-client.js (Browser-ready Supabase client)
+    - zustand-store.js   (Simplified app state: activeView, blueprint, recipes, history)
+- public/                (Static assets)
+
+1.3 Removal Plan (What to Remove Now)
+- Remove the entire cognitive pipeline folder and template engines (Handlebars) from previous builds.
+- Remove scattered dashboard components; instead, fold logic into idea-view, outline-view, deck-view.
+- Remove non-essential API endpoints. Consolidate to a single /api/ai route.
+- Remove stream parsers and complex schema validators initially; reintroduce only if necessary.
+- Keep Supabase configuration minimal (auth + two tables) and focused on our MVP.
+
+1.4 Rationale
+- One API route + one AI core file reduces surface area and makes debugging straightforward.
+- Co-located view logic encourages coherent development and faster iteration.
+- The rendering engine on the frontend ensures design consistency and robust control over visuals.
+
+Section 2 — Visual and Theming Requirements (Unchanged Look and Feel)
+2.1 Keep the Existing Aesthetic
+- Background: Vanta.js fog effect remains active at the root layout layer.
+- Theme: Glasmorphism surfaces (frosted glass panels, subtle blurs, translucency) with white text.
+- Accent: Pearl gradient for headings, buttons, sliders, and primary CTAs.
+- Typography: Consistent display size and hierarchy; avoid over-styling; prioritize readability.
+
+2.2 Accessibility Considerations
+- Maintain sufficient contrast for white text over blurred/translucent backgrounds.
+- Ensure interactive controls have clear focus states and accessible labels.
+- Support keyboard navigation across the three core views and chat interface.
+
+2.3 Motion and Delight
+- Tasteful use of Framer Motion for micro-interactions (hover, focus, tab transitions).
+- Avoid heavy animations that degrade performance; prefer short, subtle transitions.
+
+Section 3 — Core Workflow Overview
+3.1 Three Phases
+- Phase 1: Idea & Blueprint (IdeaView)
+  - User inputs: topic or URL or uploads a document; selects slide count.
+  - AI step 1: Propose 2–3 strategic angles.
+  - User picks an angle.
+  - AI step 2: Generate a high-quality structured blueprint tailored to the chosen angle.
+- Phase 2: Refine & Collaborate (OutlineView)
+  - Two-panel layout: left blueprint (direct edits allowed), right AI chat.
+  - Chat understands context (active slide when relevant) and updates the blueprint.
+  - A finalize button triggers generation of Slide Recipes.
+- Phase 3: Generate & Finalize (DeckView)
+  - Center: slide preview rendered by SlideRenderer from the recipe.
+  - Left: slide thumbnails for navigation.
+  - Right: AI assistant for slide-scoped tweaks via @mentions.
+  - Buttons: Present (full-screen), Design (optional WYSIWYG with drag/resize), Export (later).
+
+3.2 Why This Flow
+- It matches a real presentation creation lifecycle.
+- It makes AI a collaborator rather than a passive generator.
+- It focuses engineering on a narrow, polished, dependable experience.
+
+Section 4 — Detailed Feature Specifications
+4.1 IdeaView (Phase 1: Idea → Blueprint)
+- Layout Requirements
+  - Main form area: topic input, URL input, file upload (PDF/DOCX/TXT/MD), slide count selector.
+  - History panel: pinned to the right, independently scrollable; never pushes the form down.
+  - Primary CTA: Generate.
+- Data Handling
+  - If URL is provided, fetch content via backend (kept minimal: a simple extraction/pass-through later).
+  - If file is uploaded, store reference and extract server-side where feasible; otherwise, accept summary text.
+  - Topic always required as the minimal fallback.
+- AI Interaction
+  - First request: generate strategic angles for the topic.
+  - Show angles to the user (each with title, short description, target audience).
+  - After selection: generate a tailored blueprint (slide-by-slide outline including title, content points, visual suggestions, and theme cues).
+- Persistence and State
+  - Store the resulting blueprint in state and link an entry in History with timestamp and brief summary.
+  - Automatically switch the active view to OutlineView.
+- Error Handling
+  - If AI angle generation fails, show a graceful fallback: predefined angles (Technical, Inspirational, Biographical) so the user can proceed.
+  - If blueprint generation fails, retry once, then fallback to a deterministic base outline pattern (intro, key themes, conclusion) to keep progress unblocked.
+
+4.2 OutlineView (Phase 2: Refine & Collaborate)
+- Layout Requirements
+  - Left panel: the blueprint renderer showing slides 1..N with editable text fields (titles and bullet points). Visual suggestions displayed as tags or notes.
+  - Right panel: AI chat with large input, send button, and a + button to attach images/doc references. The chat panel is the primary AI channel for structural changes.
+  - Header area: prominent “Finalize & Generate Presentation” button.
+- Interaction Model
+  - Direct edits: instantaneous local updates with debounce persistence into the blueprint state.
+  - Chat edits: user messages trigger AI refinement using the current blueprint + chat history + context (e.g., active slide). On response, blueprint is replaced with the AI-updated version.
+  - Context-aware messaging: If the user has a slide selected, that slide’s ID is included in the AI request context.
+- Attachments
+  - The + button lets users attach images or notes. The blueprint should track attached assets per slide for later use during rendering.
+- Visual Feedback
+  - When the AI updates the blueprint, apply subtle highlight animations to changed fields.
+- Error Handling
+  - If AI refinement fails, keep the current blueprint and show a brief toast with an option to retry.
+  - If a user attachment cannot be processed, mark it as “pending” and allow the user to proceed without blocking.
+
+4.3 DeckView (Phase 3: Generate & Finalize)
+- Layout Requirements
+  - Center: large preview area with consistent slide aspect ratio.
+  - Left: vertical oriented thumbnail list of all slides; clicking changes the active index.
+  - Right: AI assistant panel focused on slide-scoped tweaks (supports @slideX mentions).
+  - Header actions: Present (enter full-screen), Design (optional edit mode), Export (optional in Phase 1, can be disabled if not ready).
+- Rendering Model
+  - The “Slide Recipe” JSON is the source of truth for each slide.
+  - The SlideRenderer component reads the recipe and renders pre-built components (Title, List, Diagram placeholder, Image) with consistent theme styling and spacing.
+- Design Mode (Optional for Phase 1)
+  - If enabled, allows drag/resize of components for manual fine-tuning, while maintaining guardrails for spacing and alignment.
+- AI Tweaks
+  - The right panel chat supports commands like “@slide2 make the diagram a flowchart and accent the title in gold.” The system sends the active or mentioned slide context to AI, receives an updated recipe for that slide, and refreshes.
+- Error Handling
+  - If generation of recipes fails, prompt to return to OutlineView for refinement or retry the generation.
+
+Section 5 — Data Model (Described, No Code)
+5.1 High-Level Entities
+- Presentation
+  - id, created_at, updated_at
+  - topic
+  - chosen_angle { id/key, title, description, audience }
+  - slide_count
+  - blueprint (JSON: slide array with title, points, visual suggestion, attachments)
+  - slide_recipes (JSON: array of recipe objects generated later)
+  - history metadata (for quick listing)
+- Slide (logical, nested inside presentation JSON structures)
+  - slide_id (stable key)
+  - slide_title
+  - content_points (list of strings)
+  - visual_suggestion (text and optional structured hints: type=diagram/image/table)
+  - attachments (list of asset references)
+- Slide Recipe (final rendering spec)
+  - slide_id
+  - layout_type (e.g., TitleOnly, TwoColumnImageLeft, CardsGrid, Quote, Diagram)
+  - background (color/gradient reference consistent with theme)
+  - elements (array of renderable items with type, content, style hints)
+
+5.2 Supabase Tables (Minimum Viable)
+- presentations (id, user_id, topic, chosen_angle JSON, slide_count, blueprint JSON, recipes JSON, created_at, updated_at)
+- users (managed by Supabase Auth)
+- Optionally, assets table or storage bucket references if attachments need persistence.
+
+5.3 State (Zustand)
+- activeView: idea | outline | deck
+- isLoading: boolean
+- error: message or null
+- presentation: object containing id, topic, angles, blueprint, slideRecipes, activeSlideIndex
+- history: array of presentation summaries: id, topic, updated_at
+
+Section 6 — AI Brain Architecture (Single File, Clear Actions)
+6.1 Centralized AI Logic
+- All AI prompt engineering and orchestration lives in a single module.
+- The API route dispatches action → function with a small switch.
+
+6.2 Actions
+- generate_angles
+  - Input: { topic }
+  - Behavior: Returns 2–3 angles with title, description, audience.
+  - Fallback: Predefined angles if the model fails.
+- generate_blueprint
+  - Input: { topic, angle, slideCount }
+  - Behavior: Returns a slide-by-slide structured outline with content points, suggested visuals, and theme cues.
+  - Fallback: Deterministic outline if failure occurs.
+- refine_blueprint
+  - Input: { blueprint, chatHistory, context }
+  - Behavior: Applies user intent to modify the blueprint; returns the updated blueprint.
+  - Fallback: No changes; prompt user to clarify.
+- generate_recipes
+  - Input: { blueprint }
+  - Behavior: Transforms each slide into a “Slide Recipe” JSON describing layout choices and elements for rendering.
+  - Fallback: Minimal Title + Bullet list recipe so the DeckView remains functional.
+
+6.3 Model and Provider
+- Provider: OpenRouter API as currently configured.
+- Model: z-ai/glm-4.5-air:free (or same configured default).
+- Rate limiting: Keep requests minimal and sequential (angles → blueprint → refine → recipes).
+- Output validation: Light sanity checks on returned JSON (verify arrays, types, minimal fields exist).
+
+6.4 Prompt Design Themes
+- Strategic Angles Prompt: positions AI as a presentation strategist.
+- Blueprint Prompt: positions AI as a content creator with audience alignment and narrative arc.
+- Refinement Prompt: positions AI as an editor who respects user intent and context.
+- Recipes Prompt: positions AI as a creative director choosing from a fixed palette of component types and layout patterns; returns structured JSON, not HTML.
+
+Section 7 — Frontend Rendering Engine (SlideRenderer)
+7.1 Purpose
+- Maintain pixel-perfect consistency by using our own component library for titles, lists, diagrams, and images.
+- Ensure theme fidelity to the AI-generated design system for the presentation, including its specified colors, accents, spacing, and size consistency.
+
+7.2 Input Contract
+- Receives one slide recipe at a time and renders it.
+- If a field is missing, uses graceful defaults (title centered, bullets stacked, background consistent).
+
+7.3 Component Library (Described)
+- Title
+  - Renders large heading with optional gradient accent or highlight.
+  - Accepts alignment and size hints from recipe.
+- BulletedList
+  - Renders 2–5 bullets with controlled spacing, truncation rules for overflow when necessary.
+- Diagram (Mermaid placeholder or simplified built-in visuals)
+  - Renders a placeholder or minimal diagram rendering with theme-aware colors.
+- Image
+  - Renders images with object-fit cover/contain based on hints.
+  - Supports background image or inline image placements.
+
+7.4 Responsive Constraints
+- Fixed slide aspect ratio inside a responsive container.
+- Percentage-based internal positioning when design mode is enabled.
+
+7.5 Generative Backgrounds Rendering
+- If recipe.background.generative_background exists, the renderer initializes the specified JavaScript library on the slide background layer and passes the provided options.
+- If generative initialization fails or is absent, the renderer falls back to using background.color or background.image_url.
+
+Section 8 — Authentication and Routing
+8.1 Login Flow
+- Keep the current login/auth page behavior via Supabase Auth.
+- On successful login, redirect to /dashboard.
+
+8.2 Route Protection
+- Dashboard pages require auth; unauthenticated users are redirected to login.
+
+8.3 Session Handling
+- Keep lightweight session checks on page load.
+- Avoid heavy middleware if possible; let the app router handle conditional rendering.
+
+Section 9 — History and Persistence
+9.1 History Pane Behavior
+- Lists presentations (most recent first) with topic, modified time, and small status indicators (Idea, Outline in progress, Deck generated).
+- Scrollable with its own overflow; never pushes the idea form down.
+
+9.2 Persistence Model
+- On angle selection and blueprint creation, create/update the presentation record in Supabase.
+- On refinement, update blueprint JSON.
+- On generation, attach recipes JSON.
+- Maintain a last_modified timestamp for sorting.
+
+Section 10 — Error Handling and Fallbacks
+10.1 Principles
+- Never block user progress due to AI failure.
+- Always offer a meaningful fallback and clear messaging.
+
+10.2 Examples
+- Angles: If unavailable, show predefined choices.
+- Blueprint: If generation fails, produce a deterministic outline with intro/body/conclusion.
+- Refinement: If unclear or failed, ask a short clarifying question while keeping current blueprint intact.
+- Recipes: If generation fails for a slide, use a default Title + Bullets recipe so the deck remains viewable.
+
+Section 11 — Performance and Scalability Basics
+11.1 Minimize Requests
+- Only call AI when necessary: angles → blueprint → recipes.
+- Batch operations where possible (recipes for all slides in one call if token limits allow).
+
+11.2 Caching and Local State
+- Maintain local state for current presentation to avoid frequent reads.
+- Lazy-load history on demand when the panel is opened if necessary.
+
+11.3 Asset Handling
+- Use image proxying only if required to avoid CORS issues; otherwise, rely on publicly accessible links or Supabase storage.
+
+Section 12 — Security and Secrets
+12.1 Secrets Handling
+- Keep OPENROUTER_API_KEY as an environment variable. Do not print or log it.
+- Do not echo keys or show them in any UI.
+
+12.2 User Data
+- Sanitize user-provided URLs and text. Avoid executing or embedding untrusted content.
+- Restrict file types for uploads and apply size limits.
+
+Section 13 — QA Strategy (Phase 1 Scope)
+13.1 Functional Tests (Manual)
+- IdeaView
+  - Topic-only flow generates angles and blueprint.
+  - URL flow gracefully handles reachable and unreachable links.
+  - File upload flow accepts supported types and shows clear errors for unsupported ones.
+- OutlineView
+  - Direct text edits persist and are reflected.
+  - Chat requests modify the blueprint appropriately.
+  - Attachments appear associated with the intended slide.
+- DeckView
+  - Recipes render consistently with the theme.
+  - Thumbnails navigate correctly.
+  - Present action enters and exits full-screen reliably.
+
+13.2 Edge Cases
+- Very long topics or bullets are truncated or wrapped gracefully.
+- Zero or excessive slide counts are prevented by UI constraints (min 3, max 15 initially).
+- Poor connectivity: errors are user-friendly and non-blocking.
+
+Section 14 — Deployment Readiness (Outline)
+14.1 Vercel Environment
+- Ensure all required env vars are set in Vercel dashboard.
+- Supabase keys and project URL configured for client usage.
+- OpenRouter key configured in server environment only.
+
+14.2 Build Verification
+- Confirm that the simplified directory builds without types or lint errors.
+- Validate that the single API route responds properly to each action.
+
+14.3 Post-Deployment Checks
+- Verify login, dashboard load, Idea → Outline → Deck flow.
+- Confirm that AI requests function under production domain.
+
+Section 15 — What Will Be Removed or Deferred
+15.1 Removed Immediately
+- Old cognitive pipeline folders.
+- Handlebars templates.
+- Fragmented dashboard subcomponents that do not align with the three-view model.
+- Excess API routes that duplicate functionality.
+
+15.2 Deferred (Future)
+- Advanced export formats and PPTX fidelity.
+- Real-time multi-user collaboration.
+- Complex streaming UIs and parsers.
+
+Section 16 — Next Steps and Part 2/3 Preview
+16.1 Immediate Actions
+- Create the simplified directory structure (without adding extra files beyond what’s essential).
+- Migrate minimal code into idea-view, outline-view, deck-view, store, ai core, and single API route.
+- Wire the views to state actions: generate angles, blueprint, refine, generate recipes.
+
+16.2 Part 2 (To Be Appended Next)
+- Detailed integration instructions: exact field-level contracts for AI requests and responses, JSON field definitions for recipes, context rules for chat refinement, and how attachments are referenced end-to-end.
+- Comprehensive error-handling matrices and user-facing copy standards.
+- Performance budgets, loading state microcopy, and fallbacks for offline/slow scenarios.
+
+16.3 Part 3 (To Be Appended Next)
+- Full deployment runbook to Vercel (env, build checks, zero-downtime notes), Supabase schema creation (described precisely), test scenarios with acceptance criteria, and a final go-live checklist.
+
+— End of Part 1 —
+
+NETHER AI – STREAMLINED MASTER PLAN (PART 2)
+Deep integration specifications, field contracts, refinement protocol, persistence rules, and error matrices.
+
+Section 17 — Exact Data Contracts (No Code, Field-by-Field)
+17.1 Strategic Angles (generate_angles result)
+- Object structure:
+  - angles: array (2–3 items, minimum 2)
+    - angle_id: short stable key (kebab or snake)
+    - title: human-readable title (<= 80 chars)
+    - description: concise description of the angle (<= 280 chars)
+    - audience: one of [Technical, General, Executive, Academic, Students]
+    - emphasis_keywords: array of 3–7 strings (optional), to guide tone/visuals
+- Validation rules:
+  - Required fields: angle_id, title, description, audience
+  - Unique angle_id within the result set
+  - Truncate excess text gracefully for UI if over limits
+- Persistence:
+  - Do not persist angles alone; persist only when user selects one (chosen_angle).
+
+17.2 Blueprint (generate_blueprint result)
+- Object structure:
+  - topic: string (original user topic)
+  - chosen_angle: object
+    - angle_id, title, description, audience (copied from angles)
+  - slide_count: integer (min 3, max 15 default; configurable later)
+  - theme: object (AI suggested)
+    - name: string (e.g., People’s President)
+    - palette: object
+      - primary: hex or rgba string (e.g., pearl gradient anchor color)
+      - secondary: hex or rgba string
+      - background: hex or rgba string (should support white text)
+      - accent: hex or rgba string (gold, saffron, etc.)
+    - typography: object (optional)
+      - title_scale: number (relative sizing hint 1.0–1.5)
+      - body_scale: number (0.9–1.1)
+  - slides: array of slide objects, indexed from 1 to slide_count
+    - slide_id: stable string key (e.g., s-01, s-02)
+    - slide_index: integer starting from 1
+    - slide_title: string (<= 90 chars)
+    - content_points: array of 2–5 strings (<= 180 chars each)
+    - speaker_notes: string (optional, <= 600 chars)
+    - visual_suggestion: object (optional)
+      - type: one of [image, diagram, table, quote, chart]
+      - description: string (<= 180 chars)
+      - diagram_hint: string (e.g., mermaid type; optional)
+      - image_keywords: array of strings (optional)
+    - attachments: array of asset references (optional)
+      - asset_id: string
+      - type: [image, doc, data]
+      - url_or_ref: string (public URL or storage key)
+- Validation rules:
+  - slides length equals slide_count
+  - slide_ids are unique and stable on refinement
+  - Required per slide: slide_id, slide_index, slide_title, content_points
+- Persistence:
+  - Persist complete blueprint in presentations.blueprint as JSON.
+  - Maintain a last_modified timestamp.
+
+17.3 Refinement Protocol (refine_blueprint input/output)
+- Input structure:
+  - blueprint: the full current blueprint object
+  - chatHistory: array of messages (max last 20 to constrain token usage)
+    - role: one of [user, assistant]
+    - content: string (<= 1000 chars each)
+    - timestamp: ISO string (for logging/UI; not required by AI)
+  - context: object
+    - active_slide_id: string (optional)
+    - attachments_added: array of new assets (optional)
+      - asset_id, type, url_or_ref, label (optional)
+- Output structure:
+  - blueprint: full updated blueprint with stable slide_ids and updated fields.
+- Behavioral rules:
+  - The AI should not reorder slides unless explicitly asked.
+  - The AI may insert or delete slides only if clearly requested; slide_ids must remain unique and stable.
+  - Edits from the user directly in the left panel take precedence; AI should respect existing user-modified text unless the user requests replacement.
+- Conflict resolution:
+  - If both user direct edits and chat edits target the same field concurrently, last write wins (timestamp-based) with a toast notice: “We updated this field based on your latest change.”
+
+17.4 Slide Recipes (generate_recipes result)
+- Object structure:
+  - presentation_id: string (optional for logging)
+  - theme_runtime: object (resolved palette for rendering)
+    - background, primary, secondary, accent (final hex values)
+  - recipes: array of recipe objects (length should equal slides length)
+    - slide_id: string (must match blueprint)
+    - layout_type: enum
+      - TitleOnly
+      - TitleAndBullets
+      - TwoColumnImageLeft
+      - TwoColumnImageRight
+      - ThreeColumn
+      - CardsGrid
+      - Quote
+      - FullBleedImage
+      - Diagram
+      - Table
+    - background: object
+      - color: hex or rgba (fallback to theme_runtime.background)
+      - image_url: string (optional, use cautiously; respect CORS)
+      - overlay: boolean (darken/lighten overlay hint)
+      - generative_background: object (optional)
+        - library: string (e.g., "gradient-js")
+        - options: object (library-specific options; colors must be sourced from the presentation GDS palette)
+    - elements: array of renderable items
+      - type: enum [Title, BulletedList, Paragraph, Image, Diagram, Table, Quote]
+      - content: string or array (per type)
+      - style_hints: object (non-binding hints)
+        - align: [left, center, right]
+        - color: hex (default white)
+        - weight: [regular, medium, semibold, bold]
+        - size: [sm, md, lg, xl] (relative scaling tiers)
+        - accent: boolean (apply pearl gradient accent if true)
+      - position_hints: object (optional)
+        - area: [header, main, sidebar, footer]
+        - order: integer (for stacking)
+      - diagram:
+        - syntax: [mermaid]
+        - code: string (if provided; otherwise renderer uses placeholder)
+      - table:
+        - headers: array of strings
+        - rows: array of arrays of strings
+- Validation rules:
+  - Elements must be non-empty and compatible with layout_type.
+  - If layout_type is Diagram, at least one element with type=Diagram must exist.
+  - If a referenced image is not accessible, fallback to a neutral placeholder.
+
+17.5 Thumbnails and Presentation State
+- The thumbnail list is derived from recipes; each thumbnail renders a simplified snapshot of the same recipe with reduced fidelity but exact typography scale ratios.
+- activeSlideIndex: integer maintained in Zustand; must remain within bounds [0..N-1].
+
+Section 18 — Chat Context Protocol and @Mentions
+18.1 Context Envelope
+- For each chat message sent to AI, construct an envelope that includes:
+  - user_message: raw input after client-side trimming
+  - context: object
+    - active_view: idea | outline | deck
+    - active_slide_id: string (if any)
+    - mention_targets: array (extracted from @mentions; e.g., [“slide2”])
+    - selection: object (if user selected a bullet range; optional)
+    - attachments_added: assets added in the last message (if any)
+  - blueprint_snapshot: full or minimized (only when necessary, e.g., refinement)
+  - recipe_snapshot: for deck tweaks (only the targeted slide when possible)
+
+18.2 @Mention Semantics
+- @slideN pattern selects slide with index N (1-based) and maps to slide_id.
+- If no mention and a slide is active, default to the active one.
+- Multiple mentions are allowed; AI should respond with diffs per slide.
+
+18.3 Message Size Management
+- Include last 10 assistant/user messages for context unless a structural change is requested; then include up to 20.
+- If attachments are large, include references only (asset_id and url_or_ref), not binary data.
+
+18.4 Ambiguity Reduction
+- Prepend a system instruction that reminds AI: “If a user message is ambiguous, ask exactly one clarifying question and do not make destructive changes.”
+
+Section 19 — Attachments Handling End-to-End
+19.1 Allowed Types and Limits
+- Images: jpg, jpeg, png, webp (max 5 MB per file, 20 MB total per session for MVP)
+- Docs: pdf, docx, txt, md (max 10 MB per file)
+- For MVP, avoid spreadsheets and videos; add later if needed.
+
+19.2 Storage and Referencing
+- Store images in Supabase storage bucket (e.g., “presentation-assets”).
+- Save uploaded asset record with fields: asset_id, user_id, presentation_id, type, file_name, content_type, size_bytes, storage_path, public_url (if exposed), created_at.
+- In blueprint.attachments and recipe elements, reference by asset_id and public_url.
+
+19.3 Security and Privacy
+- Do not store sensitive files without encryption. For MVP, assume general content.
+- Validate MIME types server-side. Reject executable or unknown types.
+
+19.4 Usage in AI Workflow
+- During refinement, AI receives references and instructions such as “Use asset_id X on slide Y as background.”
+- During recipe generation, if an image is requested but not provided, AI should create a placeholder instruction (e.g., type=Image with content="placeholder").
+
+Section 20 — Error Handling Matrices and User Copy
+20.1 AI Errors
+- generate_angles failure
+  - Severity: Low
+  - UI copy: “Couldn’t suggest angles right now. Here are three proven options to choose from.”
+  - Fallback: Present predefined angles.
+- generate_blueprint failure
+  - Severity: Medium
+  - UI copy: “We couldn’t build a full blueprint. We prepared a solid starting outline so you can continue.”
+  - Fallback: Deterministic outline with intro/body/conclusion.
+- refine_blueprint failure
+  - Severity: Low/Medium
+  - UI copy: “That edit didn’t go through. Try again or adjust your request.”
+  - Fallback: Keep current blueprint unchanged.
+- generate_recipes failure
+  - Severity: Medium/High
+  - UI copy: “We couldn’t finish the design for all slides. We’ve used a safe default so you can keep going.”
+  - Fallback: Default TitleAndBullets recipes for affected slides.
+
+20.2 Upload/Attachment Errors
+- Too large
+  - UI copy: “This file exceeds the size limit. Please upload a smaller file.”
+- Unsupported type
+  - UI copy: “That file type isn’t supported yet.”
+- Storage failure
+  - UI copy: “We couldn’t save your file. Please try again.”
+
+20.3 Network and Auth Errors
+- Auth expired
+  - UI copy: “Your session expired. Please log in again to continue.”
+- Network unavailable
+  - UI copy: “You’re offline. Changes will resume when you’re connected.” (if offline caching is added later)
+
+20.4 Non-blocking Principle
+- Whenever possible, the UI should keep the user moving forward with fallbacks and clear next steps.
+
+Section 21 — Performance Budgets and UX Timers
+21.1 Target Durations
+- Angles generation: < 4 seconds on average
+- Blueprint generation: < 10 seconds for 10 slides
+- Recipe generation: < 15 seconds for 10 slides (batched)
+
+21.2 Loading Indicators and Microcopy
+- Use concise phrases: “Consulting a strategist…”, “Drafting your blueprint…”, “Designing your slides…”.
+- Provide progress illusions for long tasks (animated dots, step labels) while keeping honest messaging.
+
+21.3 Batching and Parallelization
+- Prefer single-call batch recipe generation for all slides where token limits allow.
+- If chunking is required, show staged progress (e.g., Slides 1–5, then 6–10).
+
+Section 22 — State Management Details (Zustand)
+22.1 Store Fields
+- activeView: idea | outline | deck
+- isLoading: boolean
+- error: string | null
+- presentation: object
+  - id: string | null
+  - topic: string
+  - strategicAngles: array
+  - chosenAngle: object | null
+  - slideCount: number
+  - blueprint: object | null
+  - slideRecipes: array
+  - activeSlideIndex: number
+- history: array of { id, topic, updated_at }
+
+22.2 Actions and Transitions
+- setActiveView(view): changes views; validate allowed transitions (idea → outline → deck)
+- generateAngles(topic): sets loading, calls API, stores strategicAngles
+- chooseAngleAndBuildBlueprint(angle): calls API with topic+angle+slideCount; stores blueprint; switch to outline
+- updateBlueprintLocal(patch): merges user direct edits
+- refineBlueprintViaChat(message, context): calls API; replaces blueprint with returned copy
+- generateRecipes(): calls API; stores slideRecipes; switch to deck
+- setActiveSlideIndex(i): clamp to valid range
+- savePresentation(): persists to Supabase on key milestones
+
+22.3 Debounce and Autosave
+- Debounce user edits at 800–1200 ms before persisting locally and then to Supabase.
+- Prevent write storms by coalescing edits into a single update per 2–3 seconds.
+
+Section 23 — Supabase Schema (Descriptive, No SQL)
+23.1 Tables
+- presentations
+  - id: uuid
+  - user_id: uuid (FK to auth.users)
+  - topic: text
+  - chosen_angle: jsonb
+  - slide_count: int
+  - blueprint: jsonb
+  - recipes: jsonb
+  - created_at: timestamptz default now()
+  - updated_at: timestamptz default now()
+  - status: text [idea, outline, deck]
+- assets (optional for MVP if attachments are needed)
+  - asset_id: uuid
+  - user_id: uuid
+  - presentation_id: uuid
+  - type: text [image, doc, data]
+  - file_name: text
+  - content_type: text
+  - size_bytes: int
+  - storage_path: text
+  - public_url: text
+  - created_at: timestamptz
+
+23.2 Policies
+- RLS enabled; each user can access only their own records (user_id = auth.uid()).
+- assets: user can only access their own and public assets.
+
+23.3 Indexing
+- presentations: index on user_id, updated_at desc for history queries.
+
+Section 24 — Single API Endpoint Behavior
+24.1 POST /api/ai
+- Request body fields:
+  - action: string [generate_angles, generate_blueprint, refine_blueprint, generate_recipes]
+  - payload: object (depends on action)
+- Response:
+  - JSON object matching the action contract or { error } with status 500.
+
+24.2 Payload by Action
+- generate_angles
+  - topic: string
+- generate_blueprint
+  - topic: string
+  - angle: object (angle_id, title, description, audience)
+  - slideCount: number
+- refine_blueprint
+  - blueprint: object
+  - chatHistory: array of { role, content }
+  - context: object { active_slide_id, attachments_added? }
+- generate_recipes
+  - blueprint: object
+
+24.3 Server Responsibilities
+- Validate payloads lightly (presence checks, types) to fail fast.
+- Call OpenRouter with deterministic prompt formats; enforce JSON output via instructions.
+- Sanitize and clamp text lengths where appropriate.
+- On errors, log server-side with correlation id; return user-friendly copy in client.
+
+Section 25 — Prompts (Descriptive Text Only)
+25.1 Strategic Angles Prompt Theme
+- Role: “world-class presentation strategist”.
+- Inputs: topic string.
+- Output: JSON with 2–3 angles; each with title, description, audience, and angle_id.
+- Constraints: concise, distinct, audience-specific.
+
+25.2 Blueprint Prompt Theme
+- Role: “expert content creator”.
+- Inputs: topic, chosen angle, desired slide count, tone hints from theme.
+- Output: slide-by-slide outline with titles, bullet points, speaker notes (optional), and visual suggestions.
+- Constraints: coherent narrative arc, consistent theme cues, respect slide count.
+
+25.3 Refinement Prompt Theme
+- Role: “helpful presentation editor who respects explicit user edits”.
+- Inputs: full blueprint, recent chat history, context (active slide).
+- Output: full updated blueprint JSON (no conversational text).
+- Constraints: preserve user-edited fields unless instructed to replace; ask one clarifying question if ambiguous.
+
+25.4 Slide Recipes Prompt Theme
+- Role: “creative director choosing from a defined component library and layout patterns”.
+- Inputs: final blueprint and theme.
+- Output: array of recipe objects for each slide.
+- Constraints: ensure readability, consistent title sizes, high contrast between text and background as defined by the generated theme, and use the theme's accent colors sparingly; include diagram code only when asked.
+- Additional creative tool: For added visual appeal on title or section break slides, you can propose a generative_background. You must specify the library name and valid options. The colors used in the options must be sourced from the presentation's unique Generative Design System (GDS) palette to ensure a cohesive design.
+
+Section 26 — Logging, Telemetry, and Observability (MVP)
+26.1 Client-Side
+- Minimal: capture action start/finish timestamps and error summaries; send to console and optional logging endpoint later.
+
+26.2 Server-Side
+- Log action, user id (hashed or anonymized), duration, success/failure, and error message.
+- Avoid logging PII or actual slide content in production logs.
+
+Section 27 — Security Hardening (MVP Scope)
+27.1 API Keys
+- OPENROUTER_API_KEY only on server environment.
+- Do not expose in client bundles; never echo or log.
+
+27.2 Content Safety
+- Strip dangerous HTML from user inputs; we are not rendering user-supplied HTML.
+- Sanitize URLs before fetching or proxying.
+
+27.3 AuthZ
+- Enforce RLS on presentations; gate all reads/writes by user_id.
+
+Section 28 — UX Copy Standards and Tone
+28.1 Voice
+- Supportive, crisp, and confident.
+- Avoid technical jargon in user-facing messages.
+
+28.2 Examples
+- Loading: “Designing your slides…”
+- Success: “Blueprint ready. Let’s refine it together.”
+- Error: “We couldn’t complete that. Here’s the safest next step.”
+
+— End of Part 2 —
+
+NETHER AI – STREAMLINED MASTER PLAN (PART 3)
+Deployment runbook, end-to-end stitching, acceptance criteria, and go-live checklist.
+
+Section 29 — End-to-End Stitching Plan (From Empty to First Run)
+29.1 Preparation
+- Confirm environment variables locally and in Vercel:
+  - NEXT_PUBLIC_SUPABASE_URL
+  - NEXT_PUBLIC_SUPABASE_ANON_KEY
+  - OPENROUTER_API_KEY (server-only)
+- Confirm Supabase project exists and RLS policies are ready or planned.
+
+29.2 Directory Setup (Simplification)
+- Create the target directories as defined in Part 1 Section 1.2.
+- Move/merge existing code into:
+  - app/dashboard/page.js
+  - app/dashboard/idea-view.js
+  - app/dashboard/outline-view.js
+  - app/dashboard/deck-view.js
+  - app/api/ai/route.js
+  - core/ai.js
+  - utils/zustand-store.js
+  - utils/supabase-client.js
+  - components/slide-renderer.js and components/ui/*
+- Delete the deprecated directories and files listed in Part 1 Section 1.3.
+
+29.3 Minimal Wiring (No New Features Beyond Scope)
+- Routing: /dashboard renders dashboard/page which controls activeView and nests the correct view component.
+- State: Initialize Zustand store with default presentation object.
+- Auth: Keep current auth page and ensure redirect to /dashboard on session success.
+
+29.4 API Hookups
+- idea-view:
+  - On Generate: POST /api/ai with action=generate_angles and payload={ topic }.
+  - On angle select: POST /api/ai with action=generate_blueprint and payload={ topic, angle, slideCount }.
+  - Persist presentation after blueprint returns.
+- outline-view:
+  - Direct edits update local blueprint and debounce save.
+  - Chat: POST /api/ai with action=refine_blueprint and payload={ blueprint, chatHistory, context }.
+  - On finalize: POST /api/ai with action=generate_recipes and payload={ blueprint }.
+- deck-view:
+  - Render slideRecipes via SlideRenderer.
+  - Chat tweaks for @slideN update the targeted recipe (either re-run full generate_recipes with scope or a specialized tweak action in the future; for MVP, re-run with scope acknowledged but keep single action name).
+
+Section 30 — Supabase Configuration Steps (Descriptive)
+30.1 Presentations Table Creation
+- Create table presentations with fields described in Part 2 Section 23.1.
+- Enable RLS and add policy: “user can insert/select/update their own presentations” (user_id = auth.uid()).
+
+30.2 Storage Bucket (If Using Attachments)
+- Create bucket presentation-assets with public access as needed.
+- Optionally, sign URLs when embedding; for MVP, public_url can be used if appropriate.
+
+30.3 Indexing and Defaults
+- Add index on (user_id, updated_at desc).
+- Ensure updated_at auto-updates on each update (trigger or handled by app).
+
+Section 31 — Environment Management
+31.1 Local .env Entries
+- NEXT_PUBLIC_SUPABASE_URL=...
+- NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+- OPENROUTER_API_KEY=...
+- Do not commit .env files; configure Vercel Project settings for prod.
+
+31.2 Secret Hygiene
+- Never print keys; do not include secrets in client bundles or logs.
+
+Section 32 — Build and Deployment (Vercel)
+32.1 Build Command
+- Use the Next.js default build command unless customized.
+
+32.2 Vercel Project Setup
+- Import repo.
+- Set environment variables per Section 31.
+- Link to the Supabase instance (client-side URL and anon key only).
+
+32.3 First Deployment Checklist
+- Confirm / (login) renders with Vanta fog and glasmorphism.
+- Confirm /dashboard loads after auth.
+- Trigger Idea → Outline → Deck with a small topic (3–5 slides) to test latency and correctness.
+
+Section 33 — Manual QA Scenarios and Acceptance Criteria
+33.1 Scenario Matrix
+- S1: Topic-only flow (5 slides)
+  - AC: Angles appear in < 4s; blueprint returns in < 10s; outline shows correct slide count.
+- S2: Chat refinement adds a new slide
+  - AC: New slide appears with unique slide_id; numbering consistent; blueprint persists.
+- S3: Attachment added to slide and referenced in blueprint
+  - AC: Asset visible in attachments; recipe falls back gracefully if image unreachable.
+- S4: Recipe generation for 10 slides
+  - AC: All recipes render with consistent theme; thumbnails match.
+- S5: Deck tweak via @slideN
+  - AC: The targeted slide updates; others unchanged.
+- S6: Present mode
+  - AC: Full-screen works; escape returns to normal; aspect ratio preserved.
+- S7: History panel with many entries
+  - AC: Panel scrolls; idea form remains pinned; performance acceptable.
+
+33.2 Edge and Error Tests
+- E1: OpenRouter returns malformed JSON
+  - AC: Fallback applied; user informed; app remains usable.
+- E2: Network loss mid-generation
+  - AC: Idempotent retries; no duplicate records; clear messaging.
+- E3: Long content overflow in list components
+  - AC: Truncation/clamping rules apply; no layout break.
+
+Section 34 — Performance Verification
+34.1 Rendering Benchmarks
+- 10-slide deck should render thumbnails and first slide preview within 1.5s on a mid-tier laptop.
+
+34.2 Memory Footprint
+- Keep in-memory JSON under 1–2 MB for typical decks; if larger, lazy-load or compress history payloads.
+
+Section 35 — Go-Live Checklist
+- [ ] Old directories removed and repo cleaned
+- [ ] Single /api/ai route functioning for all actions
+- [ ] Views wired to state; navigation stable
+- [ ] Supabase tables present and RLS policies active
+- [ ] Env vars set in Vercel
+- [ ] Test deck generated and renders correctly
+- [ ] Basic error cases handled with user-friendly copy
+- [ ] Present mode verified
+
+Section 36 — Post-Launch Hardening (Near-Term)
+- Monitor AI latency and errors; add circuit breakers if needed.
+- Add lightweight analytics for funnel (Idea → Outline → Deck conversion).
+- Optimize bundle sizes; code-split heavy components.
+
+Section 37 — What Not To Add Yet
+- Do not add multi-user real-time collaboration until core flow is rock-solid.
+- Do not add complex streaming UIs; keep single-response flows.
+- Do not add extra export formats beyond MVP.
+
+Section 38 — Ownership and Rituals
+- Define DRI (directly responsible individual) for:
+  - AI prompts and outputs quality
+  - Rendering engine styling consistency
+  - Supabase data integrity and migrations
+  - Deployment and observability
+- Establish weekly quality reviews with demo decks; adjust prompts and rendering rules as needed.
+
+Section 39 — Future-Proofing Hooks (Without Implementing Now)
+- Leave room in the recipe schema for animation hints (enter/exit), advanced charts, and per-element transitions.
+- Consider a “StyleDNA” profile per user for later personalization.
+
+Section 40 — Final Statement
+- This plan narrows scope to what matters, transforms AI into a creative director, and guarantees visual quality via a robust rendering engine. Follow it exactly to ship a fast, reliable, and beautiful first version on Vercel.
+
+— End of Part 3 —
+
+NETHER AI – STREAMLINED MASTER PLAN (PART 4)
+Raising creative quality: Generative Design System, Layout Composer, and Rich Content Blocks.
+
+Section 41 — Overview of Enhancements
+41.1 Purpose
+- Transform the AI from picking themes/layouts to composing a cohesive design system and content-aware layouts.
+- Elevate output beyond template competitors by letting AI act as Brand Designer, Layout Artist, and Content Strategist.
+
+41.2 Scope of Changes
+- Expand theme from simple palette to a Generative Design System (GDS).
+- Expand recipes from fixed layout_type to grid-based Layout Composer specs.
+- Expand blueprint slides from simple bullet lists to Rich Content Blocks taxonomy.
+- Maintain existing three-phase flow and single API endpoint; only enhance actions’ payloads and prompts.
+
+Section 42 — Generative Design System (GDS) Specification
+42.1 GDS Object (Blueprint.theme)
+- Extend blueprint.theme with:
+  - name: string (unchanged)
+  - palette:
+    - text_primary: hex (white or near-white for dark themes)
+    - text_secondary: hex
+    - background_primary: hex (dark, supports white text)
+    - background_secondary: hex (panel surfaces)
+    - accent_primary: hex (pearl/gold per brand direction)
+    - accent_secondary: hex (supporting accent)
+    - data_positive: hex (charts)
+    - data_negative: hex (charts)
+    - neutral: hex
+  - typography:
+    - heading_font: string (e.g., Inter, Poppins)
+    - body_font: string (e.g., Lora, Roboto)
+    - heading_scale: number (1.0–1.6)
+    - body_scale: number (0.9–1.1)
+    - line_height: number (1.2–1.6)
+  - mood_keywords: array of 3–8 strings (e.g., ["minimalist","bold","high-contrast","corporate"]) 
+  - iconography: string (optional; e.g., "thin-outline", "solid")
+  - shapes_motif: string (optional; e.g., "rounded-cards", "angled-panels")
+
+42.2 Validation and Defaults
+- Required: palette.text_primary, palette.background_primary, palette.accent_primary, typography.heading_font, typography.body_font.
+- Clamp scales to valid ranges; if missing, apply defaults consistent with current glasmorphism theme.
+
+42.3 Prompt Adjustments (generate_blueprint)
+- Instruct AI: “Act as a brand designer. Propose a cohesive design system: extended color palette, typography pairing with rationale, mood keywords, optional iconography and shapes motif. Ensure high contrast between text and background as appropriate for the generated theme.”
+
+Section 43 — Rich Content Blocks in Blueprint
+43.1 Content Block Taxonomy
+- Each slide can include blocks in slides[i].blocks (replaces or augments content_points):
+  - bullet_points: { items: string[2..6] }
+  - paragraph: { text: string }
+  - statistic_highlight: { value: string, description: string }
+  - pull_quote: { text: string, author?: string }
+  - callout: { title: string, text: string }
+  - image_request: { keywords: string[], usage: [background|inline], alt_hint?: string }
+  - diagram_request: { kind: [flowchart|timeline|org|mindmap], hint?: string }
+  - table_request: { columns: string[], rows_hint: string }
+
+43.2 Rules
+- blocks may coexist with content_points during transition; renderer prioritizes blocks if present.
+- Keep blocks concise; avoid overloading a single slide.
+
+43.3 Refinement Behavior
+- Users can request transformations, e.g., “@slide3 change the paragraph to three bullets”. AI converts blocks accordingly while preserving slide_id.
+
+43.4 Prompt Adjustments (generate_blueprint, refine_blueprint)
+- Ask AI to select varied blocks per slide to improve narrative and engagement.
+- During refinement, ensure block transformations are idempotent and respect user’s direct edits.
+
+Section 44 — Layout Composer: Grid-Based Recipes
+44.1 Grid System
+- Define a 12-column, N-row implicit grid with gap units consistent with theme spacing.
+- Recipe elements include grid coordinates:
+  - grid: { colStart: 1..12, colEnd: 2..13, rowStart: 1..N, rowEnd: rowStart+ }
+- The renderer maps these to CSS grid; in design mode, constraints snap to columns.
+
+44.2 Recipe Element Extensions
+- For each recipe element:
+  - type: [Title, BulletedList, Paragraph, Image, Diagram, Table, Quote, Stat]
+  - content: per type (text/array)
+  - style_hints: { align, color, weight, size, accent, emphasis? [subtle|strong] }
+  - grid: coordinates (required except for background elements)
+  - background_element?: boolean (e.g., decorative image or shape)
+  - accessibility:
+    - aria_label?: string
+
+44.3 Composition Rules for AI
+- Content-driven placement:
+  - Long titles: span 8–12 columns; top rows.
+  - Short lists (2–3 bullets): center or right area with balanced whitespace.
+  - Diagrams: allocate generous area; avoid extreme aspect distortion.
+  - Images: background usage with overlay when specified; inline images respect aspect.
+- Maintain margins and safe areas; avoid placing content to edges.
+
+44.4 Prompt Adjustments (generate_recipes)
+- Instruct AI: “Compose a grid layout using a 12-column system. For each element, provide grid coordinates and style hints. Ensure readability, consistent scale, and respect theme GDS.”
+
+44.5 Validation
+- Ensure colStart < colEnd and within [1..13].
+- Prevent overlapping critical content unless explicitly layered by order.
+
+Section 45 — Rendering Engine Implications
+45.1 Theme Application
+- Map GDS palette to CSS variables; respect white text and pearl gradient accents.
+- Typography pairing used for Title vs Body components consistently.
+
+45.2 Component Library Additions
+- New components aligning with blocks: Quote, Stat, Callout, Paragraph.
+- Grid-aware wrapper that interprets recipe.grid per element.
+
+45.3 Design Mode Constraints
+- Snap movement to grid columns.
+- Preserve minimum sizes for readability.
+
+Section 46 — Data Contracts Update (Delta)
+46.1 Blueprint.delta
+- Add theme.mood_keywords, extended palette and typography.
+- Add slides[i].blocks as optional; maintain slides[i].content_points for backward compatibility.
+
+46.2 Recipes.delta
+- Add recipes[i].elements[*].grid object.
+- Add type variants for Quote, Stat, Callout, Paragraph.
+
+46.3 Backward Compatibility
+- If blocks absent, derive simple BulletedList/Paragraph from content_points.
+- If grid absent, apply default layout_type mapping to grid presets.
+
+Section 47 — Prompt Snippets (Descriptive Only)
+47.1 GDS Prompt Insert (Blueprint)
+- “You are a brand designer. Create a Generative Design System with extended palette (text/background/accent/data/neutral), typography pairing (heading/body with font suggestions), mood keywords, and optional iconography/shapes. Ensure high contrast between text and background suitable for the generated theme.”
+
+47.2 Blocks Prompt Insert (Blueprint)
+- “For each slide, propose diverse content blocks (bullet points, paragraph, statistic highlight, pull quote, callout, diagram/table/image requests). Keep slides concise; 1–3 blocks max.”
+
+47.3 Layout Composer Prompt Insert (Recipes)
+- “Compose a 12-column grid layout. For each element, include grid coordinates and style hints. Avoid overlap; maintain safe margins. Use theme typography and palette.”
+
+47.4 Refinement Prompt Insert
+- “Respect user-edited text. When asked, transform blocks (e.g., paragraph → bullet_points) and retain slide_id stability. Ask one clarifying question if ambiguous.”
+
+Section 48 — Validation and Fallbacks (Enhanced)
+48.1 GDS Fallback
+- If extended palette invalid, reduce to minimal palette mapped to current site theme.
+
+48.2 Blocks Fallback
+- If blocks malformed, convert to TitleAndBullets with trimmed text.
+
+48.3 Grid Fallback
+- If grid coordinates invalid or overlapping, apply default grid preset per layout_type.
+
+Section 49 — Acceptance Criteria for Enhanced Quality
+- A1: Blueprints include extended GDS and mood keywords.
+- A2: Slides include at least one non-bullet block in 50%+ of slides when appropriate.
+- A3: Recipes contain valid grid coordinates for 90%+ of elements; renderer shows consistent spacing.
+- A4: Refinement can convert block types on command while preserving slide_id and numbering.
+
+Section 50 — Rollout Strategy
+- Phase 0: Ship MVP with fixed layout_type recipes (Parts 1–3).
+- Phase 1: Enable GDS in blueprint without UI changes; renderer maps palette/typography.
+- Phase 2: Introduce blocks in blueprint and minimal support in rendering (Paragraph, Quote).
+- Phase 3: Switch recipes to grid-based composer; keep preset fallback for safety.
+
+— End of Part 4 —

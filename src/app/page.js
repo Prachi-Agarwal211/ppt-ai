@@ -6,8 +6,7 @@ import { useRouter } from 'next/navigation';
 import { FaGoogle } from 'react-icons/fa';
 import { FiEye, FiEyeOff, FiLoader } from 'react-icons/fi';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
-import { createClient } from '../utils/supabase/client';
-import { AnimatedCharacters } from './dashboard/components/AnimatedCharacters';
+import { createClient } from '@/utils/supabase-client';
 
 const isValidEmail = (email) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -285,7 +284,7 @@ export default function NetherAISignIn() {
     <main ref={mainRef} onMouseMove={handleMouseMove} className="min-h-screen w-full text-white flex items-center justify-center font-sans relative p-4">
       <motion.div style={{ rotateX, rotateY }} className="holographic-modal holographic-container relative z-10 w-full max-w-md rounded-2xl bg-black/40 p-8">
         <div style={{ transform: 'translateZ(20px)' }} className="text-center mb-6">
-          <AnimatedCharacters text="Nether AI" className="text-5xl md:text-6xl font-bold mother-of-pearl-text" />
+          <h1 className="text-5xl md:text-6xl font-bold mother-of-pearl-text">Nether AI</h1>
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6, delay: 0.8 }} className="text-gray-400 mt-3 text-sm">
             Sign in to access the digital consciousness.
           </motion.p>
